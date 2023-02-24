@@ -1,0 +1,31 @@
+Attack - Filter... Attack? (But also not, it seems to be related to sustain somehow)
+Chorus - Chorus mix (public)
+Cutoff - Filter frequency
+Decay - Filter decay?
+Depth - Chorus depth?
+Dry/Wet - Dry/Wet for filter
+E - Meow Sustain (public)
+EnvMod - Controls "Attack" and "Decay" filter.
+Filter Type - Filter type, LP/HP/BP1/BP2/Notch
+Gain - Master volume
+M - Meow Attack (public)
+Min - Chorus distance? (appears to control delaytime for the chorus effect)
+Noise - Noise mix (public)
+O - Meow Decay (public) (yes it's in the wrong order)
+Patch Mem - Text (#1) - ???
+Patch Mem - Text (#2) - ???
+Phase - Phase
+Portamento time - Portamento Time (public)
+Q - Q value for filter
+Rate - Chorus rate?
+Vibrato Amount - Vibrato Amount (public)
+Vibrato Attack - Vibrato Attack (public)
+W - Meow Release (public)
+Waveform (#1 - beat) - Vibrato time, in beats and synced to BPM (public)
+Waveform (#2 - float) - ???
+Waveform (#3 - int) - pitchbend amount (public)
+Waveform (#4 - On/Off) - Polycat toggle (public)
+
+
+MEOW envelope appears to control both volume and filter ADSRs
+EnvMod filter ADSR seems to also affect filter, maybe they are just added
