@@ -1,11 +1,9 @@
 use crate::{
     ease::{ease_in_poly, lerp, Easing},
     neighbor_pairs::NeighborPairsIter,
-    params::{EnvelopeParams, OSCType},
+    params::EnvelopeParams,
 };
-use crate::{
-    params::OSCParams, ModBankEnvs, ModulationBank, ModulationSend, ModulationType, Parameters,
-};
+use crate::{params::OSCParams, Parameters};
 
 use biquad::{Biquad, DirectForm1, ToHertz, Q_BUTTERWORTH_F32};
 use derive_more::{Add, Sub};
@@ -76,7 +74,6 @@ impl EnvelopeType for f32 {
 
 pub struct SoundGenerator {
     osc_1: OSCGroup,
-    osc_2: OSCGroup,
     pub note: wmidi::Note,
     // The pitch of the note this SoundGenerator is playing, ignoring all coarse
     // detune and pitch bend effects. This is in hertz.
@@ -108,8 +105,7 @@ impl SoundGenerator {
             vel,
             samples_since_note_on: 0,
             note_state: NoteState::None,
-            osc_1: OSCGroup::new(sample_rate, OSCType::OSC1),
-            osc_2: OSCGroup::new(sample_rate, OSCType::OSC2),
+            osc_1: OSCGroup::new(sample_rate),
             next_note_on: None,
             next_note_off: None,
         }
@@ -123,14 +119,7 @@ impl SoundGenerator {
             NoteState::Released(release_time) => {
                 // The number of seconds it has been since release
                 let time = (self.samples_since_note_on - release_time) as f32 / sample_rate;
-                match params.osc_2_mod {
-                    // If we mix together the two sounds then we should only kill the note
-                    // after both oscillators have died.
-                    ModulationType::Mix => {
-                        time < params.osc_1.vol_adsr.release || time < params.osc_2.vol_adsr.release
-                    }
-                    _ => time < params.osc_1.vol_adsr.release,
-                }
+                time < params.osc_1.vol_adsr.release
             }
         }
     }
@@ -167,7 +156,6 @@ impl SoundGenerator {
                 };
 
                 self.osc_1.note_state_changed(edge);
-                self.osc_2.note_state_changed(edge);
 
                 // Update the note state
                 self.note_state = match self.note_state {
@@ -184,7 +172,6 @@ impl SoundGenerator {
         match self.next_note_off {
             Some(note_off) if note_off == i => {
                 self.osc_1.note_state_changed(NoteStateEdge::NoteReleased);
-                self.osc_2.note_state_changed(NoteStateEdge::NoteReleased);
 
                 self.note_state = NoteState::Released(self.samples_since_note_on);
                 self.next_note_off = None;
@@ -201,28 +188,12 @@ impl SoundGenerator {
             }
         }
 
-        // When osc_2 is not in mix mode, the note velocity is ignored (to make
-        // it easier to get a consistent sound)
-        let osc_2_is_mix = params.osc_2_mod == ModulationType::Mix;
-        let osc_2 = self.osc_2.next_sample(
-            &params.osc_2,
-            context,
-            if osc_2_is_mix { self.vel } else { 1.0 },
-            self.note_pitch,
-            pitch_bend,
-            (ModulationType::Mix, 0.0),
-            &params.mod_bank,
-            osc_2_is_mix,
-        );
-
         let osc_1 = self.osc_1.next_sample(
             &params.osc_1,
             context,
             self.vel,
             self.note_pitch,
             pitch_bend,
-            (params.osc_2_mod, osc_2),
-            &params.mod_bank,
             true,
         );
 
@@ -231,16 +202,8 @@ impl SoundGenerator {
             (radians.cos(), radians.sin())
         }
 
-        if params.osc_2_mod == ModulationType::Mix {
-            let (osc_1_left, osc_1_right) = pan_split(params.osc_1.pan);
-            let (osc_2_left, osc_2_right) = pan_split(params.osc_2.pan);
-            let left = osc_1 * osc_1_left + osc_2 * osc_2_left;
-            let right = osc_1 * osc_1_right + osc_2 * osc_2_right;
-            (left, right)
-        } else {
-            let (pan_left, pan_right) = pan_split(params.osc_1.pan);
-            (osc_1 * pan_left, osc_1 * pan_right)
-        }
+        let (pan_left, pan_right) = pan_split(params.osc_1.pan);
+        (osc_1 * pan_left, osc_1 * pan_right)
     }
 
     pub fn note_on(&mut self, frame_delta: i32, vel: f32) {
@@ -256,22 +219,18 @@ struct OSCGroup {
     osc: Oscillator,
     vol_env: Envelope<Decibel>,
     pitch_env: Envelope<f32>,
-    mod_bank_envs: ModBankEnvs,
     volume_lfo: Oscillator,
     pitch_lfo: Oscillator,
-    // The OSC that this OSCGroup belongs to.
-    osc_type: OSCType,
     // The state for the EQ/filters, applied after the signal is generated
     filter: DirectForm1<f32>,
 }
 
 impl OSCGroup {
-    fn new(sample_rate: f32, osc_type: OSCType) -> OSCGroup {
+    fn new(sample_rate: f32) -> OSCGroup {
         OSCGroup {
             osc: Oscillator::new(),
             vol_env: Envelope::<Decibel>::new(),
             pitch_env: Envelope::<f32>::new(),
-            mod_bank_envs: ModBankEnvs::new(),
             volume_lfo: Oscillator::new(),
             pitch_lfo: Oscillator::new(),
             filter: DirectForm1::<f32>::new(
@@ -283,7 +242,6 @@ impl OSCGroup {
                 )
                 .unwrap(),
             ),
-            osc_type,
         }
     }
 
@@ -305,31 +263,9 @@ impl OSCGroup {
         base_vel: f32,
         base_note: f32,
         pitch_bend: f32,
-        (mod_type, modulation): (ModulationType, f32),
-        mod_bank: &ModulationBank,
         apply_filter: bool,
     ) -> f32 {
         let sample_rate = context.sample_rate;
-
-        // TODO: consider merging ModulationValues with the rest of the modulation
-        // calculations in this block of code. Some notes
-        // 1. You probably need to commit to storing either the post-multiplied
-        //    or the pre-multiplied values (WITH the semi-tone amount) in the
-        //    pitch variable. This probably means making more pitch field?
-        //    Also, some modulations have additional weird offsets applied
-        //    EX: AmpMod and VolLFO both are plus one'd and VolLFO is clamped at
-        //    zero. Tis is easy to do but will be annoying to generalize.
-        //    Also, how do we handle LFOs in the mod bank? (i think this should
-        //    handled at from_mod_bank time)
-        //    You need to probably store pre-multiplied values for each of the
-        //    various modulation values.
-
-        let mod_bank = ModulationValues::from_mod_bank(
-            &mut self.mod_bank_envs,
-            mod_bank,
-            context,
-            self.osc_type,
-        );
 
         // Compute volume from parameters, ADSR, LFO, and AmpMod
         let vol_env = self.vol_env.get(&params.vol_adsr, context);
@@ -341,22 +277,13 @@ impl OSCGroup {
             0.0, // no phase mod
         ) * params.vol_lfo.amplitude;
 
-        let vol_mod = if mod_type == ModulationType::AmpMod {
-            modulation
-        } else {
-            0.0
-        };
-
         // Apply parameter, ADSR, LFO, and AmpMod for total volume
         // We clamp the LFO to positive values because negative values cause the
         // signal to be inverted, which isn't what we want (instead it should
         // just have zero volume). We don't do this for the AmpMod because inverting
         // the signal allows for more interesting audio.
-        let total_volume = base_vel
-            * (params.volume + vol_env).get_amp()
-            * (1.0 + vol_lfo).max(0.0)
-            * (1.0 + vol_mod)
-            * (1.0 - mod_bank.amplitude);
+        let total_volume =
+            base_vel * (params.volume + vol_env).get_amp() * (1.0 + vol_lfo).max(0.0);
 
         // Compute note pitch multiplier from ADSR and envelope
         let pitch_env = self.pitch_env.get(&params.pitch_adsr, context);
@@ -370,13 +297,6 @@ impl OSCGroup {
         let pitch_fine = to_pitch_multiplier(params.fine_tune / 100.0, 1);
         let pitch_bend = to_pitch_multiplier(pitch_bend, 12);
         let pitch_mods = to_pitch_multiplier(pitch_env + pitch_lfo, 24);
-        let mod_bank_pitch = to_pitch_multiplier(mod_bank.pitch, 24);
-
-        let fm_mod = if mod_type == ModulationType::FreqMod {
-            to_pitch_multiplier(modulation, 24)
-        } else {
-            1.0
-        };
 
         // The final pitch multiplier, post-FM
         // Base note is the base note frequency, in hz
@@ -385,25 +305,7 @@ impl OSCGroup {
         // Fine and course pitchbend come from the parameters.
         // The FM Mod comes from the modulation value.
         // Mod bank pitch comes from the mod bank.
-        let pitch = base_note
-            * pitch_mods
-            * pitch_bend
-            * pitch_coarse
-            * pitch_fine
-            * fm_mod
-            * mod_bank_pitch;
-
-        let warp_mod = if mod_type == ModulationType::WarpMod {
-            modulation
-        } else {
-            0.0
-        };
-
-        let phase_mod = if mod_type == ModulationType::PhaseMod {
-            modulation
-        } else {
-            0.0
-        };
+        let pitch = base_note * pitch_mods * pitch_bend * pitch_coarse * pitch_fine;
 
         // Disable the filter when doing modulation (filtering the signal makes
         // it nearly impossible to get a nice modulation signal since it messes
@@ -415,17 +317,13 @@ impl OSCGroup {
         };
 
         // Get next sample
-        let value = self.osc.next_sample(
-            sample_rate,
-            params.shape.add(warp_mod).add(mod_bank.warp),
-            pitch,
-            phase_mod + params.phase + mod_bank.phase,
-        );
+        let value = self
+            .osc
+            .next_sample(sample_rate, params.shape, pitch, params.phase);
 
         // Apply filter (if desired)
         let value = match filter_params {
             Some(mut params) => {
-                params.freq += mod_bank.filter_freq;
                 let coefficents = FilterParams::into_coefficients(params, sample_rate);
                 self.filter.update_coefficients(coefficents);
                 let output = self.filter.run(value);
@@ -449,8 +347,6 @@ impl OSCGroup {
         match edge {
             NoteStateEdge::NoteReleased | NoteStateEdge::NoteRetriggered => {
                 self.vol_env.remember();
-                self.mod_bank_envs.env_1.remember();
-                self.mod_bank_envs.env_2.remember();
             }
             _ => {}
         }
@@ -587,62 +483,6 @@ impl<T: EnvelopeType> Envelope<T> {
     fn remember(&mut self) -> T {
         self.ease_from = self.last_env_value;
         self.ease_from
-    }
-}
-
-/// The modulation values for each of the various parameters that can be modulated
-/// These values need to be in normalized float format, where 0.0 means "no modulation"
-/// +1.0 means "max positive modulation", and -1.0 means "max negative modulation"
-/// It is acceptable for values to be outside the -1.0 - +1.0 range.
-#[derive(Debug, Default, Add)]
-struct ModulationValues {
-    amplitude: f32,
-    pitch: f32, // pre-multiplied pitch bend value
-    phase: f32,
-    warp: f32,
-    filter_freq: f32,
-}
-
-impl ModulationValues {
-    fn from_value(value: f32, send: ModulationSend) -> ModulationValues {
-        let (mut amplitude, mut pitch, mut phase, mut warp, mut filter_freq) =
-            (0.0, 0.0, 0.0, 0.0, 0.0);
-        match send {
-            ModulationSend::Amplitude => amplitude = value,
-            ModulationSend::Phase => phase = value,
-            ModulationSend::Pitch => pitch = value,
-            ModulationSend::Warp => warp = value,
-            ModulationSend::FilterFreq => filter_freq = value,
-        }
-        ModulationValues {
-            amplitude,
-            pitch,
-            phase,
-            warp,
-            filter_freq,
-        }
-    }
-
-    fn from_mod_bank(
-        mod_bank_envs: &mut ModBankEnvs,
-        mod_bank: &ModulationBank,
-        context: NoteContext,
-        osc_type: OSCType,
-    ) -> ModulationValues {
-        let env_1 = if mod_bank.env_1_send.osc == osc_type {
-            mod_bank_envs.env_1.get(&mod_bank.env_1, context)
-        } else {
-            0.0
-        };
-
-        let env_2 = if mod_bank.env_2_send.osc == osc_type {
-            mod_bank_envs.env_2.get(&mod_bank.env_2, context)
-        } else {
-            0.0
-        };
-
-        ModulationValues::from_value(env_1, mod_bank.env_1_send.mod_type)
-            + ModulationValues::from_value(env_2, mod_bank.env_2_send.mod_type)
     }
 }
 

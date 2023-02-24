@@ -10,10 +10,7 @@ use serde::{Deserialize, Serialize};
 use variant_count::VariantCount;
 
 use crate::{
-    params::{
-        GeneralEnvParams, ModulationBank, ModulationSend, ModulationType, OSCParams, Parameters,
-        LFO,
-    },
+    params::{GeneralEnvParams, OSCParams, Parameters, LFO},
     sound_gen::{Decibel, FilterParams, NoteShapeDiscrim},
 };
 
@@ -22,9 +19,6 @@ pub struct PresetData {
     pub name: String,
     pub master_vol: Decibel,
     pub osc_1: PresetDataOSC,
-    pub osc_2: PresetDataOSC,
-    pub osc_2_mod: ModulationType,
-    pub mod_bank: PresetDataModBank,
 }
 
 impl PresetData {
@@ -33,9 +27,6 @@ impl PresetData {
             name,
             master_vol: params.master_vol,
             osc_1: PresetDataOSC::from(&params.osc_1),
-            osc_2: PresetDataOSC::from(&params.osc_2),
-            osc_2_mod: params.osc_2_mod,
-            mod_bank: PresetDataModBank::from(&params.mod_bank),
         }
     }
 }
@@ -87,25 +78,6 @@ impl From<&OSCParams> for PresetDataOSC {
             vol_lfo: params.vol_lfo,
             pitch_lfo: params.pitch_lfo,
             filter: PresetDataFilter::from(&params.filter_params),
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct PresetDataModBank {
-    pub env_1_send: ModulationSend,
-    pub env_1: GeneralEnvParams,
-    pub env_2_send: ModulationSend,
-    pub env_2: GeneralEnvParams,
-}
-
-impl From<&ModulationBank> for PresetDataModBank {
-    fn from(params: &ModulationBank) -> Self {
-        PresetDataModBank {
-            env_1: params.env_1,
-            env_1_send: params.env_1_send.mod_type,
-            env_2: params.env_2,
-            env_2_send: params.env_2_send.mod_type,
         }
     }
 }

@@ -9,8 +9,6 @@ mod neighbor_pairs;
 mod params;
 mod presets;
 mod sound_gen;
-mod ui;
-mod ui_tabs;
 
 use std::{
     convert::TryFrom,
@@ -19,7 +17,6 @@ use std::{
 };
 
 use backtrace::Backtrace;
-use iced_baseview::Application;
 use once_cell::sync::Lazy;
 use vst::{
     api::{Events, Supported},
@@ -29,15 +26,11 @@ use vst::{
 };
 use wmidi::MidiMessage;
 
-use params::{
-    ModBankEnvs, ModulationBank, ModulationSend, ModulationType, ParameterType, Parameters,
-    RawParameters,
-};
+use params::{ParameterType, Parameters, RawParameters};
 use sound_gen::{
     normalize_U7, normalize_pitch_bend, to_pitch_envelope, NormalizedPitchbend, SampleRate,
     SoundGenerator,
 };
-use ui::UIFrontEnd;
 
 static PROJECT_DIRS: Lazy<Option<directories::ProjectDirs>> =
     Lazy::new(|| directories::ProjectDirs::from("", "", "Revisit VST"));
@@ -95,9 +88,6 @@ struct Revisit {
     pitch_bend: Vec<(NormalizedPitchbend, i32)>,
     /// The last pitch bend value from the previous frame.
     last_pitch_bend: NormalizedPitchbend,
-    /// If true, then the GUI has been initalized and `get_editor()` will return
-    /// None.
-    gui_initialized: bool,
 }
 
 impl Plugin for Revisit {
@@ -108,7 +98,6 @@ impl Plugin for Revisit {
             sample_rate: 44100.0,
             pitch_bend: Vec::with_capacity(16),
             last_pitch_bend: 0.0,
-            gui_initialized: false,
         }
     }
 
@@ -284,13 +273,7 @@ impl Plugin for Revisit {
 
     // The GUI exposed to the host
     fn get_editor(&mut self) -> Option<Box<dyn Editor>> {
-        if self.gui_initialized {
-            None
-        } else {
-            self.gui_initialized = true;
-            let (editor, _) = UIFrontEnd::new(self.params.clone());
-            Some(Box::new(editor))
-        }
+        None
     }
 }
 
