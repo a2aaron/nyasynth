@@ -3,14 +3,13 @@ use std::convert::TryFrom;
 use crate::{
     ease::{DiscreteLinear, Easing},
     generate_raw_params, impl_display, impl_from_i32, impl_get_default, impl_get_ref,
-    impl_into_i32, impl_new, impl_set_by_preset,
-    presets::{FilterTypeDiscrim, I32Divable, PresetData},
+    impl_into_i32, impl_new,
+    presets::{FilterTypeDiscrim, I32Divable},
     sound_gen::{Decibel, FilterParams, NoteShape, NoteShapeDiscrim},
 };
 
 use derive_more::Display;
 use serde::{Deserialize, Serialize};
-use variant_count::VariantCount;
 use vst::{host::Host, plugin::PluginParameters, util::AtomicFloat};
 
 // Low Pass, High Pass, Bandpass
@@ -791,4 +790,3 @@ table! {impl_get_default}
 table! {impl_from_i32}
 table! {impl_into_i32}
 table! {impl_display}
-table! {impl_set_by_preset}

@@ -109,24 +109,3 @@ macro_rules! impl_into_i32 {
         }
     };
 }
-
-macro_rules! set_by_preset_helper {
-    ($self:ident, $variant:expr, NONE,               $preset:ident, $($preset_field:ident)+) => {};
-    ($self:ident, $variant:expr, $easer_field:ident, $preset:ident, NONE) => {};
-    ($self:ident, $variant:expr, $easer_field:ident, $preset:ident, $($preset_field:ident)+) => {
-        $self.set_and_update_knob(EASER.$easer_field.inv_ease($preset.$($preset_field).+), $variant);
-    };
-}
-
-#[macro_export]
-macro_rules! impl_set_by_preset {
-   ($raw_parameters: ident, $parameter_type: ident;
-    $($variant:expr, $field_name:expr, $name:expr, $idx:expr, $default:expr, $easer_field:ident, $($preset_field:ident).+;)*) => {
-        impl $raw_parameters {
-            /// Set all the parameters via a preset. Note that this also updates the GUI
-            pub fn set_by_preset(&self, preset: &PresetData) {
-                $(set_by_preset_helper! {self, $variant, $easer_field, preset, $($preset_field)+})*
-            }
-        }
-    }
-}
