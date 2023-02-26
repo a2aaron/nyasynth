@@ -4,10 +4,8 @@
 extern crate vst;
 
 mod ease;
-mod macros;
 mod neighbor_pairs;
 mod params;
-mod presets;
 mod sound_gen;
 
 use std::{
