@@ -3,6 +3,7 @@
 #[macro_use]
 extern crate vst;
 
+mod common;
 mod ease;
 mod neighbor_pairs;
 mod params;
@@ -15,6 +16,7 @@ use std::{
 };
 
 use backtrace::Backtrace;
+use common::SampleRate;
 use once_cell::sync::Lazy;
 use params::MeowParameters;
 use vst::{
@@ -26,8 +28,7 @@ use vst::{
 use wmidi::MidiMessage;
 
 use sound_gen::{
-    normalize_pitch_bend, normalize_u7, to_pitch_envelope, NormalizedPitchbend, SampleRate,
-    SoundGenerator,
+    normalize_pitch_bend, normalize_u7, to_pitch_envelope, NormalizedPitchbend, SoundGenerator,
 };
 
 static PROJECT_DIRS: Lazy<Option<directories::ProjectDirs>> =

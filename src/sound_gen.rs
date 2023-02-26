@@ -1,12 +1,11 @@
 use crate::{
-    ease::{lerp, Easing},
+    common::{Decibel, SampleRate, SampleTime},
+    ease::lerp,
     neighbor_pairs::NeighborPairsIter,
-    params::{EnvelopeParams, MeowParameters, Seconds},
+    params::{EnvelopeParams, MeowParameters},
 };
 
 use biquad::{Biquad, DirectForm1, Hertz, ToHertz, Q_BUTTERWORTH_F32};
-use derive_more::{Add, Sub};
-use serde::{Deserialize, Serialize};
 use variant_count::VariantCount;
 use wmidi::{PitchBend, U14, U7};
 
@@ -15,13 +14,9 @@ const TAU: f32 = std::f32::consts::TAU;
 // The time, in samples, for how long retrigger phase is.
 const RETRIGGER_TIME: SampleTime = 88; // 88 samples is about 2 miliseconds.
 
-// The threshold for which Decibel values below it will be treated as negative
-// infinity dB.
-pub const NEG_INF_DB_THRESHOLD: f32 = -70.0;
-
 /// An offset, in samples, from the start of the frame.
 type FrameDelta = usize;
-type SampleTime = usize;
+
 /// A value in range [0.0, 1.0] which denotes the position wihtin a wave cycle.
 type Angle = f32;
 /// A pitchbend value in [-1.0, +1.0] range, where +1.0 means "max upward bend"
@@ -588,102 +583,6 @@ impl std::fmt::Display for NoteShape {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Add, Sub)]
-/// A struct representing Decibels.
-pub struct Decibel(f32);
-
-impl std::ops::Mul<f32> for Decibel {
-    type Output = Decibel;
-
-    fn mul(self, rhs: f32) -> Self::Output {
-        Decibel::from_db(self.0 * rhs)
-    }
-}
-
-impl std::ops::Div<Decibel> for Decibel {
-    type Output = f32;
-    fn div(self, rhs: Decibel) -> Self::Output {
-        self.get_db() / rhs.get_db()
-    }
-}
-
-impl crate::sound_gen::EnvelopeType for Decibel {
-    fn lerp_attack(start: Self, end: Self, t: f32) -> Self {
-        // Lerp in amplitude space during the attack phase. This is useful
-        // long attacks usually need linear amplitude ramp ups.
-        Decibel::lerp_amp(start, end, t)
-    }
-    fn lerp_decay(start: Self, end: Self, t: f32) -> Self {
-        Decibel::lerp_db(start.get_db(), end.get_db(), t)
-    }
-    fn lerp_release(start: Self, end: Self, t: f32) -> Self {
-        Decibel::lerp_db(start.get_db(), end.get_db(), t)
-    }
-    fn lerp_retrigger(start: Self, end: Self, t: f32) -> Self {
-        Decibel::lerp_amp(start, end, t)
-    }
-    fn one() -> Self {
-        Decibel::zero_db()
-    }
-    fn zero() -> Self {
-        Decibel::neg_inf_db()
-    }
-}
-
-impl Decibel {
-    pub const fn from_db(db: f32) -> Decibel {
-        Decibel(db)
-    }
-
-    pub const fn neg_inf_db() -> Decibel {
-        Decibel::from_db(NEG_INF_DB_THRESHOLD)
-    }
-
-    pub const fn zero_db() -> Decibel {
-        Decibel::from_db(0.0)
-    }
-
-    pub fn from_amp(amp: f32) -> Decibel {
-        Decibel::from_db(f32::log10(amp) * 10.0)
-    }
-
-    // Linearly interpolate in amplitude space.
-    pub fn lerp_amp(start: Decibel, end: Decibel, t: f32) -> Decibel {
-        let amp = crate::sound_gen::lerp(start.get_amp(), end.get_amp(), t);
-        Decibel::from_amp(amp)
-    }
-
-    // Linearly interpolate in Decibel space.
-    pub fn lerp_db(start: f32, end: f32, t: f32) -> Decibel {
-        let db = crate::sound_gen::lerp(start, end, t);
-        Decibel::from_db(db)
-    }
-
-    // Linearly interpolate in Decibel space, but values of t below 0.125 will
-    // lerp from `start` to `Decibel::zero()`. This function is meant for use
-    // with user-facing parameter knobs.
-    pub const fn ease_db(start: f32, end: f32) -> Easing<Decibel> {
-        Easing::SplitLinear {
-            start: Decibel::neg_inf_db(),
-            mid: Decibel::from_db(start),
-            end: Decibel::from_db(end),
-            split_at: 0.125,
-        }
-    }
-
-    pub fn get_amp(&self) -> f32 {
-        if self.get_db() <= NEG_INF_DB_THRESHOLD {
-            0.0
-        } else {
-            10.0f32.powf(self.get_db() / 10.0)
-        }
-    }
-
-    pub fn get_db(&self) -> f32 {
-        self.0
-    }
-}
-
 /// Returns an iterator of size num_samples which linearly interpolates between the
 /// points specified by pitch_bend. last_pitch_bend is assumed to be the "-1th"
 /// value and is used as the starting point.
@@ -762,37 +661,4 @@ pub fn to_pitch_multiplier(pitch_bend: NormalizedPitchbend, semitones: i32) -> f
     // We take an exponential here because frequency is exponential with respect
     // to note value
     exponent.powf(pitch_bend)
-}
-
-/// The sample rate in Hz/seconds. Must be a positive value.
-#[derive(Debug, Clone, Copy)]
-pub struct SampleRate(pub f32);
-
-impl SampleRate {
-    pub fn new(rate: f32) -> Option<SampleRate> {
-        if rate <= 0.0 {
-            None
-        } else {
-            Some(SampleRate(rate))
-        }
-    }
-
-    pub fn get(&self) -> f32 {
-        self.0
-    }
-
-    pub fn to_seconds(&self, samples: SampleTime) -> Seconds {
-        let seconds = samples as f32 / self.get();
-        Seconds::new(seconds).unwrap()
-    }
-
-    pub fn hz(&self) -> biquad::Hertz<f32> {
-        self.get().hz()
-    }
-}
-
-impl From<f32> for SampleRate {
-    fn from(value: f32) -> Self {
-        SampleRate::new(value).unwrap()
-    }
 }

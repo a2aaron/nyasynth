@@ -1,9 +1,7 @@
 use biquad::Hertz;
-use derive_more::{Add, From, Sub};
-use ordered_float::{FloatIsNan, NotNan};
 use vst::{plugin::PluginParameters, util::AtomicFloat};
 
-use crate::sound_gen::Decibel;
+use crate::common::{Decibel, Seconds};
 
 pub struct MeowParameters {
     raw_parameters: RawParameters,
@@ -425,35 +423,5 @@ impl EnvelopeParams<f32> for VibratoParams {
 
     fn release(&self) -> Seconds {
         Seconds::ZERO
-    }
-}
-
-#[derive(Debug, Clone, Copy, Add, Sub, From, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Seconds(pub NotNan<f32>);
-
-impl Seconds {
-    pub const ZERO: Seconds = Seconds(unsafe { NotNan::new_unchecked(0.0) });
-
-    pub fn new(seconds: f32) -> Result<Seconds, FloatIsNan> {
-        let value = NotNan::new(seconds)?;
-        Ok(Seconds(value))
-    }
-
-    pub fn get(&self) -> f32 {
-        self.0.into()
-    }
-}
-
-impl From<Seconds> for f32 {
-    fn from(value: Seconds) -> Self {
-        value.get()
-    }
-}
-
-impl std::ops::Div for Seconds {
-    type Output = f32;
-
-    fn div(self, rhs: Self) -> Self::Output {
-        self.get() / rhs.get()
     }
 }
