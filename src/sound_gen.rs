@@ -255,7 +255,7 @@ impl OSCGroup {
         // signal to be inverted, which isn't what we want (instead it should
         // just have zero volume). We don't do this for the AmpMod because inverting
         // the signal allows for more interesting audio.
-        let total_volume = base_vel * vol_env.get_amp().max(0.0) * params.master_vol();
+        let total_volume = base_vel * (params.master_vol() + vol_env).get_amp().max(0.0);
 
         let vibrato_env = self.vibrato_env.get(&params.vibrato_lfo(), context);
         // Compute note pitch multiplier
@@ -292,7 +292,10 @@ impl OSCGroup {
         // Apply filter
         let value = {
             let filter = params.filter();
+            // TODO: investigate if this is correct
             let filter_env = self.filter_env.get(&params.filter_envelope(), context);
+            let filter_env = (filter_env + base_vel) * params.filter_envelope().env_mod;
+
             let cutoff_freq = (filter.cutoff_freq.hz() * filter_env).hz();
 
             let coefficents = biquad::Coefficients::<f32>::from_params(

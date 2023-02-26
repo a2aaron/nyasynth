@@ -10,6 +10,7 @@ pub trait Lerpable = Add<Self, Output = Self>
 pub trait InvLerpable = Sub<Self, Output = Self> + Div<Self, Output = f32> + Sized + Copy + Clone;
 
 /// An enum representing an ease.
+#[derive(Debug)]
 pub enum Easing<T> {
     /// Linearly ease from start to end.
     Linear { start: T, end: T },

@@ -1,6 +1,6 @@
 use biquad::ToHertz;
-use derive_more::{Add, From, Sub};
-use ordered_float::{FloatIsNan, NotNan};
+use derive_more::{Add, From, Into, Sub};
+use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -29,7 +29,7 @@ impl SampleRate {
 
     pub fn to_seconds(&self, samples: SampleTime) -> Seconds {
         let seconds = samples as f32 / self.get();
-        Seconds::new(seconds).unwrap()
+        Seconds::new(seconds)
     }
 
     pub fn hz(&self) -> biquad::Hertz<f32> {
@@ -46,20 +46,34 @@ impl From<f32> for SampleRate {
 /// A wrapper struct representing a duration of seconds. This struct implements [std::ops::Div], so
 /// it's possible to divide a [Seconds] by another [Seconds] and get an [f32].
 #[derive(Debug, Clone, Copy, Add, Sub, From, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Seconds(pub NotNan<f32>);
+pub struct Seconds(pub OrderedFloat<f32>);
 
 impl Seconds {
-    pub const ZERO: Seconds = Seconds(unsafe { NotNan::new_unchecked(0.0) });
+    pub const ZERO: Seconds = Seconds(OrderedFloat(0.0));
 
-    /// Construct a new [Seconds]. `seconds` must not be NaN.
-    pub fn new(seconds: f32) -> Result<Seconds, FloatIsNan> {
-        let value = NotNan::new(seconds)?;
-        Ok(Seconds(value))
+    /// Construct a new [Seconds].
+    pub const fn new(seconds: f32) -> Seconds {
+        let value = OrderedFloat(seconds);
+        Seconds(value)
     }
 
     /// Get the number of seconds as an [f32].
-    pub fn get(&self) -> f32 {
-        self.0.into()
+    pub const fn get(&self) -> f32 {
+        self.0 .0
+    }
+
+    pub const fn ease_exp(start: f32, end: f32) -> Easing<Seconds> {
+        let start = Seconds::new(start);
+        let end = Seconds::new(end);
+        Easing::Exponential { start, end }
+    }
+}
+
+impl std::ops::Mul<f32> for Seconds {
+    type Output = Seconds;
+
+    fn mul(self, rhs: f32) -> Self::Output {
+        Seconds::new(self.get() * rhs)
     }
 }
 
@@ -182,5 +196,33 @@ impl std::ops::Div<Decibel> for Decibel {
     type Output = f32;
     fn div(self, rhs: Decibel) -> Self::Output {
         self.get_db() / rhs.get_db()
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Add, Sub, Serialize, Deserialize, From, Into)]
+/// An i32 which implements Lerpable (that is, can be multiplied by an f32). This is intended for
+/// parameters such as Coarse Tune, which typically snap to the nearest whole number (ex: can only
+/// take on integer values like "+2 semis").
+pub struct I32Divable(pub i32);
+
+impl I32Divable {
+    pub const fn new(x: i32) -> I32Divable {
+        I32Divable(x)
+    }
+}
+
+impl std::ops::Div<Self> for I32Divable {
+    type Output = f32;
+
+    fn div(self, rhs: Self) -> Self::Output {
+        (self.0 as f32) / (rhs.0 as f32)
+    }
+}
+
+impl std::ops::Mul<f32> for I32Divable {
+    type Output = Self;
+
+    fn mul(self, rhs: f32) -> Self::Output {
+        I32Divable(((self.0 as f32) * rhs) as i32)
     }
 }
