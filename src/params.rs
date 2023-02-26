@@ -4,7 +4,32 @@ use vst::{plugin::PluginParameters, util::AtomicFloat};
 use crate::common::{Decibel, Seconds};
 
 pub struct MeowParameters {
-    raw_parameters: RawParameters,
+    // Public parameters (exposed in UI)
+    meow_attack: Parameter,
+    meow_decay: Parameter,
+    meow_sustain: Parameter,
+    meow_release: Parameter,
+    vibrato_amount: Parameter,
+    vibrato_attack: Parameter,
+    vibrato_rate: Parameter,
+    portamento_time: Parameter,
+    noise_mix: Parameter,
+    chorus_mix: Parameter,
+    pitch_bend: Parameter,
+    polycat: Parameter,
+    // Internal parametert not be exposed)
+    gain: Parameter,
+    filter_attack: Parameter,
+    filter_decay: Parameter,
+    filter_envlope_mod: Parameter,
+    filter_dry_wet: Parameter,
+    filter_q: Parameter,
+    filter_type: Parameter,
+    filter_cutoff_freq: Parameter,
+    chorus_depth: Parameter,
+    chorus_distance: Parameter,
+    chorus_rate: Parameter,
+    phase: Parameter,
 }
 
 impl MeowParameters {
@@ -12,7 +37,31 @@ impl MeowParameters {
 
     pub fn new() -> MeowParameters {
         MeowParameters {
-            raw_parameters: RawParameters::new(),
+            meow_attack: Parameter::time("Meow Attack", 0.0),
+            meow_decay: Parameter::time("Meow Decay", 0.0),
+            meow_sustain: Parameter::percent("Meow Sustain", 0.0),
+            meow_release: Parameter::time("Meow Release", 0.0),
+            vibrato_amount: Parameter::percent("Vibrato Amount", 0.0),
+            vibrato_attack: Parameter::time("Vibrato Attack", 0.0),
+            vibrato_rate: Parameter::time("Vibrato Rate", 0.0),
+            portamento_time: Parameter::time("Portamento", 0.0),
+            noise_mix: Parameter::percent("Noise", 0.0),
+            chorus_mix: Parameter::percent("Chorus", 0.0),
+            pitch_bend: Parameter::with_units("Pitchbend", "semis", 0.0),
+            polycat: Parameter::with_units("Polycat", "", 0.0),
+            // Internal parameters (might not be exposed)
+            gain: Parameter::with_units("name", "units", 0.0),
+            filter_attack: Parameter::with_units("name", "units", 0.0),
+            filter_decay: Parameter::with_units("name", "units", 0.0),
+            filter_envlope_mod: Parameter::with_units("name", "units", 0.0),
+            filter_dry_wet: Parameter::with_units("name", "units", 0.0),
+            filter_q: Parameter::with_units("name", "units", 0.0),
+            filter_type: Parameter::with_units("name", "units", 0.0),
+            filter_cutoff_freq: Parameter::with_units("name", "units", 0.0),
+            chorus_depth: Parameter::with_units("name", "units", 0.0),
+            chorus_distance: Parameter::with_units("name", "units", 0.0),
+            chorus_rate: Parameter::with_units("name", "units", 0.0),
+            phase: Parameter::with_units("name", "units", 0.0),
         }
     }
 
@@ -59,11 +108,41 @@ impl MeowParameters {
     pub fn vibrato_lfo(&self) -> VibratoParams {
         todo!()
     }
+
+    fn get(&self, index: i32) -> Option<&Parameter> {
+        let param = match index {
+            0 => &self.meow_attack,
+            1 => &self.meow_decay,
+            2 => &self.meow_sustain,
+            3 => &self.meow_release,
+            4 => &self.vibrato_amount,
+            5 => &self.vibrato_attack,
+            6 => &self.vibrato_rate,
+            7 => &self.portamento_time,
+            8 => &self.noise_mix,
+            9 => &self.chorus_mix,
+            10 => &self.pitch_bend,
+            11 => &self.polycat,
+            12 => &self.filter_attack,
+            13 => &self.filter_decay,
+            14 => &self.filter_envlope_mod,
+            15 => &self.filter_dry_wet,
+            16 => &self.filter_q,
+            17 => &self.filter_type,
+            18 => &self.filter_cutoff_freq,
+            19 => &self.chorus_depth,
+            20 => &self.chorus_distance,
+            21 => &self.chorus_rate,
+            22 => &self.phase,
+            _ => return None,
+        };
+        Some(param)
+    }
 }
 
 impl PluginParameters for MeowParameters {
     fn get_parameter_label(&self, index: i32) -> String {
-        if let Some(parameter) = self.raw_parameters.get(index) {
+        if let Some(parameter) = self.get(index) {
             parameter.get_label()
         } else {
             "".to_string()
@@ -71,7 +150,7 @@ impl PluginParameters for MeowParameters {
     }
 
     fn get_parameter_text(&self, index: i32) -> String {
-        if let Some(parameter) = self.raw_parameters.get(index) {
+        if let Some(parameter) = self.get(index) {
             parameter.get_text()
         } else {
             "".to_string()
@@ -79,7 +158,7 @@ impl PluginParameters for MeowParameters {
     }
 
     fn get_parameter_name(&self, index: i32) -> String {
-        if let Some(parameter) = self.raw_parameters.get(index) {
+        if let Some(parameter) = self.get(index) {
             parameter.name.to_string()
         } else {
             "".to_string()
@@ -87,7 +166,7 @@ impl PluginParameters for MeowParameters {
     }
 
     fn get_parameter(&self, index: i32) -> f32 {
-        if let Some(parameter) = self.raw_parameters.get(index) {
+        if let Some(parameter) = self.get(index) {
             parameter.get_value()
         } else {
             0.0
@@ -95,7 +174,7 @@ impl PluginParameters for MeowParameters {
     }
 
     fn set_parameter(&self, index: i32, value: f32) {
-        if let Some(parameter) = self.raw_parameters.get(index) {
+        if let Some(parameter) = self.get(index) {
             // This is needed because some VST hosts, such as Ableton, echo a
             // parameter change back to the plugin. This causes issues such as
             // weird knob behavior where the knob "flickers" because the user tries
@@ -201,97 +280,6 @@ impl Parameter {
             formatter: NameFormatter::Other(units),
             value: default.into(),
         }
-    }
-}
-
-struct RawParameters {
-    // Public parameters (exposed in UI)
-    meow_attack: Parameter,
-    meow_decay: Parameter,
-    meow_sustain: Parameter,
-    meow_release: Parameter,
-    vibrato_amount: Parameter,
-    vibrato_attack: Parameter,
-    vibrato_rate: Parameter,
-    portamento_time: Parameter,
-    noise_mix: Parameter,
-    chorus_mix: Parameter,
-    pitch_bend: Parameter,
-    polycat: Parameter,
-    // Internal parametert not be exposed)
-    gain: Parameter,
-    filter_attack: Parameter,
-    filter_decay: Parameter,
-    filter_envlope_mod: Parameter,
-    filter_dry_wet: Parameter,
-    filter_q: Parameter,
-    filter_type: Parameter,
-    filter_cutoff_freq: Parameter,
-    chorus_depth: Parameter,
-    chorus_distance: Parameter,
-    chorus_rate: Parameter,
-    phase: Parameter,
-}
-
-impl RawParameters {
-    fn new() -> RawParameters {
-        RawParameters {
-            meow_attack: Parameter::time("Meow Attack", 0.0),
-            meow_decay: Parameter::time("Meow Decay", 0.0),
-            meow_sustain: Parameter::percent("Meow Sustain", 0.0),
-            meow_release: Parameter::time("Meow Release", 0.0),
-            vibrato_amount: Parameter::percent("Vibrato Amount", 0.0),
-            vibrato_attack: Parameter::time("Vibrato Attack", 0.0),
-            vibrato_rate: Parameter::time("Vibrato Rate", 0.0),
-            portamento_time: Parameter::time("Portamento", 0.0),
-            noise_mix: Parameter::percent("Noise", 0.0),
-            chorus_mix: Parameter::percent("Chorus", 0.0),
-            pitch_bend: Parameter::with_units("Pitchbend", "semis", 0.0),
-            polycat: Parameter::with_units("Polycat", "", 0.0),
-            // Internal parameters (might not be exposed)
-            gain: Parameter::with_units("name", "units", 0.0),
-            filter_attack: Parameter::with_units("name", "units", 0.0),
-            filter_decay: Parameter::with_units("name", "units", 0.0),
-            filter_envlope_mod: Parameter::with_units("name", "units", 0.0),
-            filter_dry_wet: Parameter::with_units("name", "units", 0.0),
-            filter_q: Parameter::with_units("name", "units", 0.0),
-            filter_type: Parameter::with_units("name", "units", 0.0),
-            filter_cutoff_freq: Parameter::with_units("name", "units", 0.0),
-            chorus_depth: Parameter::with_units("name", "units", 0.0),
-            chorus_distance: Parameter::with_units("name", "units", 0.0),
-            chorus_rate: Parameter::with_units("name", "units", 0.0),
-            phase: Parameter::with_units("name", "units", 0.0),
-        }
-    }
-
-    fn get(&self, index: i32) -> Option<&Parameter> {
-        let param = match index {
-            0 => &self.meow_attack,
-            1 => &self.meow_decay,
-            2 => &self.meow_sustain,
-            3 => &self.meow_release,
-            4 => &self.vibrato_amount,
-            5 => &self.vibrato_attack,
-            6 => &self.vibrato_rate,
-            7 => &self.portamento_time,
-            8 => &self.noise_mix,
-            9 => &self.chorus_mix,
-            10 => &self.pitch_bend,
-            11 => &self.polycat,
-            12 => &self.filter_attack,
-            13 => &self.filter_decay,
-            14 => &self.filter_envlope_mod,
-            15 => &self.filter_dry_wet,
-            16 => &self.filter_q,
-            17 => &self.filter_type,
-            18 => &self.filter_cutoff_freq,
-            19 => &self.chorus_depth,
-            20 => &self.chorus_distance,
-            21 => &self.chorus_rate,
-            22 => &self.phase,
-            _ => return None,
-        };
-        Some(param)
     }
 }
 
