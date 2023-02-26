@@ -2107,6 +2107,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "nyasynth"
+version = "0.1.0"
+dependencies = [
+ "backtrace",
+ "baseview",
+ "biquad",
+ "derive_more",
+ "directories",
+ "iced",
+ "iced_audio",
+ "iced_baseview",
+ "iced_futures",
+ "iced_graphics",
+ "iced_native",
+ "keyboard-types",
+ "log",
+ "once_cell",
+ "ordered-float",
+ "rand",
+ "raw-window-handle 0.3.4",
+ "serde",
+ "serde_json",
+ "simple-logging",
+ "tokio",
+ "variant_count",
+ "vst",
+ "wmidi",
+]
+
+[[package]]
 name = "objc"
 version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2435,36 +2465,6 @@ checksum = "528532f3d801c87aec9def2add9ca802fe569e44a544afe633765267840abe64"
 dependencies = [
  "getrandom",
  "redox_syscall 0.2.8",
-]
-
-[[package]]
-name = "revisit"
-version = "0.1.0"
-dependencies = [
- "backtrace",
- "baseview",
- "biquad",
- "derive_more",
- "directories",
- "iced",
- "iced_audio",
- "iced_baseview",
- "iced_futures",
- "iced_graphics",
- "iced_native",
- "keyboard-types",
- "log",
- "once_cell",
- "ordered-float",
- "rand",
- "raw-window-handle 0.3.4",
- "serde",
- "serde_json",
- "simple-logging",
- "tokio",
- "variant_count",
- "vst",
- "wmidi",
 ]
 
 [[package]]
