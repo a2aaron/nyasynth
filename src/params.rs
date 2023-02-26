@@ -1,7 +1,59 @@
 use biquad::Hertz;
 use vst::{plugin::PluginParameters, util::AtomicFloat};
 
-use crate::common::{Decibel, Seconds};
+use crate::{
+    common::{Decibel, Seconds},
+    ease::Easing,
+};
+
+pub const IDENTITY: Easing<f32> = Easing::Linear {
+    start: 0.0,
+    end: 1.0,
+};
+
+pub const BIPOLAR: Easing<f32> = Easing::Linear {
+    start: -1.0,
+    end: 1.0,
+};
+
+// Default values for master volume
+pub const DEFAULT_MASTER_VOL: f32 = 0.6875; // -3 dB
+
+// Min and maximum ranges for volume knobs.
+pub const MASTER_VOL_MIN_DB: f32 = -36.0;
+pub const MASTER_VOL_MAX_DB: f32 = 12.0;
+pub const SUSTAIN_MIN_DB: f32 = -24.0;
+
+// Default values for volume envelope
+pub const DEFAULT_MEOW_ATTACK: f32 = 0.1;
+pub const DEFAULT_MEOW_DECAY: f32 = 0.5; // ~200 ms
+pub const DEFAULT_MEOW_SUSTAIN: f32 = 0.75;
+pub const DEFAULT_MEOW_RELEASE: f32 = 0.3;
+
+pub const DEFAULT_VIBRATO_AMOUNT: f32 = 0.0;
+pub const DEFAULT_VIBRATO_ATTACK: f32 = 0.0;
+pub const DEFAULT_VIBRATO_RATE: f32 = 0.0;
+
+pub const DEFAULT_FILTER_ATTACK: f32 = 0.0;
+pub const DEFAULT_FILTER_DECAY: f32 = 0.0;
+pub const DEFAULT_FILTER_ENVLOPE_MOD: f32 = 0.0;
+pub const DEFAULT_FILTER_DRY_WET: f32 = 1.0; // 100% filter
+pub const DEFAULT_FILTER_Q: f32 = 0.1;
+pub const DEFAULT_FILTER_TYPE: f32 = 0.0; // Low Pass
+pub const DEFAULT_FILTER_CUTOFF_FREQ: f32 = 0.0;
+
+pub const DEFAULT_CHORUS_MIX: f32 = 0.0;
+pub const DEFAULT_CHORUS_DEPTH: f32 = 0.0;
+pub const DEFAULT_CHORUS_DISTANCE: f32 = 0.0;
+pub const DEFAULT_CHORUS_RATE: f32 = 0.0;
+
+pub const DEFAULT_PHASE: f32 = 0.0;
+
+pub const DEFAULT_NOISE_MIX: f32 = 0.0;
+
+pub const DEFAULT_PITCHBEND: f32 = 1.0; // +12 semis
+pub const DEFAULT_PORTAMENTO: f32 = 0.3;
+pub const DEFAULT_POLYCAT: f32 = 0.0; // Off
 
 pub struct MeowParameters {
     // Public parameters (exposed in UI)
@@ -37,44 +89,48 @@ impl MeowParameters {
 
     pub fn new() -> MeowParameters {
         MeowParameters {
-            meow_attack: Parameter::time("Meow Attack", 0.0),
-            meow_decay: Parameter::time("Meow Decay", 0.0),
-            meow_sustain: Parameter::percent("Meow Sustain", 0.0),
-            meow_release: Parameter::time("Meow Release", 0.0),
-            vibrato_amount: Parameter::percent("Vibrato Amount", 0.0),
-            vibrato_attack: Parameter::time("Vibrato Attack", 0.0),
-            vibrato_rate: Parameter::time("Vibrato Rate", 0.0),
-            portamento_time: Parameter::time("Portamento", 0.0),
-            noise_mix: Parameter::percent("Noise", 0.0),
-            chorus_mix: Parameter::percent("Chorus", 0.0),
-            pitch_bend: Parameter::with_units("Pitchbend", "semis", 0.0),
-            polycat: Parameter::with_units("Polycat", "", 0.0),
+            meow_attack: Parameter::time("Meow Attack", DEFAULT_MEOW_ATTACK),
+            meow_decay: Parameter::time("Meow Decay", DEFAULT_MEOW_DECAY),
+            meow_sustain: Parameter::decibel("Meow Sustain", DEFAULT_MEOW_SUSTAIN),
+            meow_release: Parameter::time("Meow Release", DEFAULT_MEOW_RELEASE),
+            vibrato_amount: Parameter::percent("Vibrato Amount", DEFAULT_VIBRATO_AMOUNT),
+            vibrato_attack: Parameter::time("Vibrato Attack", DEFAULT_VIBRATO_ATTACK),
+            vibrato_rate: Parameter::time("Vibrato Rate", DEFAULT_VIBRATO_RATE),
+            portamento_time: Parameter::time("Portamento", DEFAULT_PORTAMENTO),
+            noise_mix: Parameter::percent("Noise", DEFAULT_NOISE_MIX),
+            chorus_mix: Parameter::percent("Chorus", DEFAULT_CHORUS_MIX),
+            pitch_bend: Parameter::with_units("Pitchbend", " semis", DEFAULT_PITCHBEND),
+            polycat: Parameter::new("Polycat", NameFormatter::Boolean, DEFAULT_POLYCAT),
             // Internal parameters (might not be exposed)
-            gain: Parameter::with_units("name", "units", 0.0),
-            filter_attack: Parameter::with_units("name", "units", 0.0),
-            filter_decay: Parameter::with_units("name", "units", 0.0),
-            filter_envlope_mod: Parameter::with_units("name", "units", 0.0),
-            filter_dry_wet: Parameter::with_units("name", "units", 0.0),
-            filter_q: Parameter::with_units("name", "units", 0.0),
-            filter_type: Parameter::with_units("name", "units", 0.0),
-            filter_cutoff_freq: Parameter::with_units("name", "units", 0.0),
-            chorus_depth: Parameter::with_units("name", "units", 0.0),
-            chorus_distance: Parameter::with_units("name", "units", 0.0),
-            chorus_rate: Parameter::with_units("name", "units", 0.0),
-            phase: Parameter::with_units("name", "units", 0.0),
+            gain: Parameter::decibel("Master Volume", DEFAULT_MASTER_VOL),
+            filter_attack: Parameter::time("Filter Attack", DEFAULT_FILTER_ATTACK),
+            filter_decay: Parameter::time("Filter Decay", DEFAULT_FILTER_DECAY),
+            filter_envlope_mod: Parameter::percent("Filter EnvMod", DEFAULT_FILTER_ENVLOPE_MOD),
+            filter_dry_wet: Parameter::percent("Filter DryWet", DEFAULT_FILTER_DRY_WET),
+            filter_q: Parameter::with_units("Filter Q", "", DEFAULT_FILTER_Q),
+            filter_type: Parameter::with_units("Filter Type", "", DEFAULT_FILTER_TYPE),
+            filter_cutoff_freq: Parameter::with_units(
+                "Filter Cutoff",
+                "Hz",
+                DEFAULT_FILTER_CUTOFF_FREQ,
+            ),
+            chorus_depth: Parameter::with_units("Chorus Rate", "", DEFAULT_CHORUS_DEPTH),
+            chorus_distance: Parameter::with_units("Chorus Rate", "", DEFAULT_CHORUS_DISTANCE),
+            chorus_rate: Parameter::with_units("Chorus Rate", "", DEFAULT_CHORUS_RATE),
+            phase: Parameter::new("Phase", NameFormatter::Angle, DEFAULT_PHASE),
         }
     }
 
-    pub fn master_vol(&self) -> f32 {
-        1.0
+    pub fn master_vol(&self) -> Decibel {
+        Decibel::ease_db(MASTER_VOL_MIN_DB, MASTER_VOL_MAX_DB).ease(self.gain.get())
     }
 
     pub fn phase(&self) -> f32 {
-        todo!()
+        self.phase.get()
     }
 
     pub fn noise_mix(&self) -> f32 {
-        todo!()
+        self.noise_mix.get()
     }
 
     pub fn portamento_time(&self) -> Seconds {
@@ -86,7 +142,7 @@ impl MeowParameters {
     }
 
     pub fn polycat(&self) -> bool {
-        todo!()
+        self.polycat.get() > 0.5
     }
 
     pub fn vol_envelope(&self) -> VolumeEnvelopeParams {
@@ -167,7 +223,7 @@ impl PluginParameters for MeowParameters {
 
     fn get_parameter(&self, index: i32) -> f32 {
         if let Some(parameter) = self.get(index) {
-            parameter.get_value()
+            parameter.get()
         } else {
             0.0
         }
@@ -181,7 +237,7 @@ impl PluginParameters for MeowParameters {
             // to change the knob value, but ableton keeps sending back old, echoed
             // values.
             #[allow(clippy::float_cmp)]
-            if parameter.get_value() == value {
+            if parameter.get() == value {
                 return;
             }
             parameter.set_value(value)
@@ -199,6 +255,9 @@ impl PluginParameters for MeowParameters {
 enum NameFormatter {
     Time,
     Percent,
+    Decibel,
+    Angle,
+    Boolean,
     Other(&'static str),
 }
 
@@ -208,6 +267,24 @@ impl NameFormatter {
             NameFormatter::Time => time_formatter(value).0,
             NameFormatter::Percent => percent_formatter(value).0,
             NameFormatter::Other(_) => format!("{:.3}", value),
+            NameFormatter::Decibel => {
+                let decibel: Decibel = todo!();
+                if decibel.get_db() <= Decibel::NEG_INF_DB_THRESHOLD {
+                    "-inf".to_string()
+                } else if decibel.get_db() < 0.0 {
+                    format!("{:.2}", decibel.get_db())
+                } else {
+                    format!("+{:.2}", decibel.get_db())
+                }
+            }
+            NameFormatter::Angle => format!("{:.2}", value * 360.0),
+            NameFormatter::Boolean => {
+                if value < 0.5 {
+                    "Off".to_string()
+                } else {
+                    "On".to_string()
+                }
+            }
         }
     }
 
@@ -216,6 +293,9 @@ impl NameFormatter {
             NameFormatter::Time => time_formatter(value).1,
             NameFormatter::Percent => percent_formatter(value).1,
             NameFormatter::Other(units) => units.to_string(),
+            NameFormatter::Decibel => "dB".to_string(),
+            NameFormatter::Angle => "deg".to_string(),
+            NameFormatter::Boolean => "".to_string(),
         }
     }
 }
@@ -243,14 +323,14 @@ struct Parameter {
 
 impl Parameter {
     fn get_text(&self) -> String {
-        self.formatter.get_text(self.get_value())
+        self.formatter.get_text(self.get())
     }
 
     fn get_label(&self) -> String {
-        self.formatter.get_label(self.get_value())
+        self.formatter.get_label(self.get())
     }
 
-    fn get_value(&self) -> f32 {
+    fn get(&self) -> f32 {
         self.value.get()
     }
 
@@ -266,6 +346,21 @@ impl Parameter {
         }
     }
 
+    fn new(name: &'static str, formatter: NameFormatter, default: f32) -> Self {
+        Self {
+            name,
+            formatter,
+            value: default.into(),
+        }
+    }
+
+    fn decibel(name: &'static str, default: f32) -> Self {
+        Self {
+            name,
+            formatter: NameFormatter::Decibel,
+            value: default.into(),
+        }
+    }
     fn percent(name: &'static str, default: f32) -> Self {
         Self {
             name,
