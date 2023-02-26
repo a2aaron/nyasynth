@@ -29,3 +29,49 @@ Waveform (#4 - On/Off) - Polycat toggle (public)
 
 MEOW envelope appears to control both volume and filter ADSRs
 EnvMod filter ADSR seems to also affect filter, maybe they are just added
+
+----
+Other
+    Gain - Master volume
+    Noise - Noise mix (public)
+    Phase - Phase
+    Portamento time - Portamento Time (public)
+    Waveform (#3 - int) - pitchbend amount (public)
+    Waveform (#4 - On/Off) - Polycat toggle (public)
+
+MEOW - Volume + Filter Freq ADSR
+    M - Meow Attack (public)
+    E - Meow Sustain (public)
+    O - Meow Decay (public) (yes it's in the wrong order)
+    W - Meow Release (public)
+
+Filter
+    Cutoff - Filter frequency
+    Q - Q value for filter
+    Filter Type - Filter type, LP/HP/BP1/BP2/Notch
+    Dry/Wet - Dry/Wet for filter
+
+Filter Envelope
+    Attack - Filter... Attack? (But also not, it seems to be related to sustain somehow)
+    Decay - Filter decay?
+    EnvMod - Controls "Attack" and "Decay" filter.
+
+Chorus
+    Chorus - Chorus mix (public)
+    Depth - Chorus depth?
+    Min - Chorus distance? (appears to control delaytime for the chorus effect)
+    Rate - Chorus rate?
+
+Vibrato
+    Vibrato Amount - Vibrato Amount (public)
+    Vibrato Attack - Vibrato Attack (public)
+    Waveform (#1 - beat) - Vibrato time, in beats and synced to BPM (public)
+
+Unknown
+    Patch Mem - Text (#1) - ???
+    Patch Mem - Text (#2) - ???
+    Waveform (#2 - float) - ???
+
+
+MEOW envelope appears to control both volume and filter ADSRs
+EnvMod filter ADSR seems to also affect filter, maybe they are just added

@@ -1,11 +1,10 @@
 use crate::{
-    ease::{ease_in_poly, lerp, Easing},
+    ease::{lerp, Easing},
     neighbor_pairs::NeighborPairsIter,
-    params::EnvelopeParams,
+    params::{EnvelopeParams, MeowParameters, Seconds},
 };
-use crate::{params::OSCParams, Parameters};
 
-use biquad::{Biquad, DirectForm1, ToHertz, Q_BUTTERWORTH_F32};
+use biquad::{Biquad, DirectForm1, Hertz, ToHertz, Q_BUTTERWORTH_F32};
 use derive_more::{Add, Sub};
 use serde::{Deserialize, Serialize};
 use variant_count::VariantCount;
@@ -25,8 +24,6 @@ type FrameDelta = usize;
 type SampleTime = usize;
 /// A value in range [0.0, 1.0] which denotes the position wihtin a wave cycle.
 type Angle = f32;
-/// The sample rate in Hz/seconds.
-pub type SampleRate = f32;
 /// A pitchbend value in [-1.0, +1.0] range, where +1.0 means "max upward bend"
 /// and -1.0 means "max downward bend"
 pub type NormalizedPitchbend = f32;
@@ -77,7 +74,7 @@ pub struct SoundGenerator {
     pub note: wmidi::Note,
     // The pitch of the note this SoundGenerator is playing, ignoring all coarse
     // detune and pitch bend effects. This is in hertz.
-    note_pitch: f32,
+    note_pitch: Hertz<f32>,
     // The velocity of the note that this SoundGenerator is playing, ignoring all
     // amplitude modulation effects. This is a 0.0 - 1.0 normalized value.
     vel: f32,
@@ -101,7 +98,7 @@ impl SoundGenerator {
     pub fn new(note: wmidi::Note, vel: f32, sample_rate: SampleRate) -> SoundGenerator {
         SoundGenerator {
             note,
-            note_pitch: wmidi::Note::to_freq_f32(note),
+            note_pitch: wmidi::Note::to_freq_f32(note).hz(),
             vel,
             samples_since_note_on: 0,
             note_state: NoteState::None,
@@ -113,20 +110,20 @@ impl SoundGenerator {
 
     /// Returns true if the note is "alive" (playing audio). A note is dead if
     /// it is in the release state and it is after the total release time.
-    pub fn is_alive(&self, sample_rate: SampleRate, params: &Parameters) -> bool {
+    pub fn is_alive(&self, sample_rate: SampleRate, params: &MeowParameters) -> bool {
         match self.note_state {
             NoteState::None | NoteState::Held | NoteState::Retrigger(_) => true,
             NoteState::Released(release_time) => {
                 // The number of seconds it has been since release
-                let time = (self.samples_since_note_on - release_time) as f32 / sample_rate;
-                time < params.osc_1.vol_adsr.release
+                let time = sample_rate.to_seconds(self.samples_since_note_on - release_time);
+                time < params.vol_envelope().release()
             }
         }
     }
 
     pub fn next_sample(
         &mut self,
-        params: &Parameters,
+        params: &MeowParameters,
         i: FrameDelta,
         sample_rate: SampleRate,
         pitch_bend: f32,
@@ -188,22 +185,11 @@ impl SoundGenerator {
             }
         }
 
-        let osc_1 = self.osc_1.next_sample(
-            &params.osc_1,
-            context,
-            self.vel,
-            self.note_pitch,
-            pitch_bend,
-            true,
-        );
+        let osc_1 = self
+            .osc_1
+            .next_sample(&params, context, self.vel, self.note_pitch, pitch_bend);
 
-        fn pan_split(pan: f32) -> (f32, f32) {
-            let radians = (pan + 1.0) * std::f32::consts::PI / 4.0;
-            (radians.cos(), radians.sin())
-        }
-
-        let (pan_left, pan_right) = pan_split(params.osc_1.pan);
-        (osc_1 * pan_left, osc_1 * pan_right)
+        (osc_1, osc_1)
     }
 
     pub fn note_on(&mut self, frame_delta: i32, vel: f32) {
@@ -218,21 +204,21 @@ impl SoundGenerator {
 struct OSCGroup {
     osc: Oscillator,
     vol_env: Envelope<Decibel>,
-    pitch_env: Envelope<f32>,
-    volume_lfo: Oscillator,
-    pitch_lfo: Oscillator,
+    vibrato_env: Envelope<f32>,
+    vibrato_lfo: Oscillator,
     // The state for the EQ/filters, applied after the signal is generated
     filter: DirectForm1<f32>,
+    filter_env: Envelope<f32>,
 }
 
 impl OSCGroup {
-    fn new(sample_rate: f32) -> OSCGroup {
+    fn new(sample_rate: SampleRate) -> OSCGroup {
         OSCGroup {
             osc: Oscillator::new(),
             vol_env: Envelope::<Decibel>::new(),
-            pitch_env: Envelope::<f32>::new(),
-            volume_lfo: Oscillator::new(),
-            pitch_lfo: Oscillator::new(),
+            vibrato_env: Envelope::<f32>::new(),
+            vibrato_lfo: Oscillator::new(),
+            filter_env: Envelope::<f32>::new(),
             filter: DirectForm1::<f32>::new(
                 biquad::Coefficients::<f32>::from_params(
                     biquad::Type::LowPass,
@@ -258,45 +244,34 @@ impl OSCGroup {
     /// apply_filter - if true, apply the current filter.
     fn next_sample(
         &mut self,
-        params: &OSCParams,
+        params: &MeowParameters,
         context: NoteContext,
         base_vel: f32,
-        base_note: f32,
+        base_note: Hertz<f32>,
         pitch_bend: f32,
-        apply_filter: bool,
     ) -> f32 {
         let sample_rate = context.sample_rate;
 
-        // Compute volume from parameters, ADSR, LFO, and AmpMod
-        let vol_env = self.vol_env.get(&params.vol_adsr, context);
-
-        let vol_lfo = self.volume_lfo.next_sample(
-            context.sample_rate,
-            NoteShape::Sine,
-            1.0 / params.vol_lfo.period,
-            0.0, // no phase mod
-        ) * params.vol_lfo.amplitude;
+        // Compute volume from parameters
+        let vol_env = self.vol_env.get(&params.vol_envelope(), context);
 
         // Apply parameter, ADSR, LFO, and AmpMod for total volume
         // We clamp the LFO to positive values because negative values cause the
         // signal to be inverted, which isn't what we want (instead it should
         // just have zero volume). We don't do this for the AmpMod because inverting
         // the signal allows for more interesting audio.
-        let total_volume =
-            base_vel * (params.volume + vol_env).get_amp() * (1.0 + vol_lfo).max(0.0);
+        let total_volume = base_vel * vol_env.get_amp().max(0.0) * params.master_vol();
 
-        // Compute note pitch multiplier from ADSR and envelope
-        let pitch_env = self.pitch_env.get(&params.pitch_adsr, context);
-        let pitch_lfo = self.pitch_lfo.next_sample(
+        let vibrato_env = self.vibrato_env.get(&params.vibrato_lfo(), context);
+        // Compute note pitch multiplier
+        let vibrato_lfo = self.vibrato_lfo.next_sample(
             sample_rate,
             NoteShape::Sine,
-            1.0 / params.pitch_lfo.period,
+            params.vibrato_lfo().freq(),
             1.0,
-        ) * params.pitch_lfo.amplitude;
-        let pitch_coarse = to_pitch_multiplier(1.0, params.coarse_tune);
-        let pitch_fine = to_pitch_multiplier(params.fine_tune / 100.0, 1);
-        let pitch_bend = to_pitch_multiplier(pitch_bend, 12);
-        let pitch_mods = to_pitch_multiplier(pitch_env + pitch_lfo, 24);
+        ) * vibrato_env;
+        let pitch_bend = to_pitch_multiplier(pitch_bend, params.pitchbend_max() as i32);
+        let pitch_mods = to_pitch_multiplier(vibrato_lfo, 24);
 
         // The final pitch multiplier, post-FM
         // Base note is the base note frequency, in hz
@@ -305,40 +280,47 @@ impl OSCGroup {
         // Fine and course pitchbend come from the parameters.
         // The FM Mod comes from the modulation value.
         // Mod bank pitch comes from the mod bank.
-        let pitch = base_note * pitch_mods * pitch_bend * pitch_coarse * pitch_fine;
+        let pitch = base_note.hz() * pitch_mods * pitch_bend;
 
-        // Disable the filter when doing modulation (filtering the signal makes
-        // it nearly impossible to get a nice modulation signal since it messes
-        // with the phase a lot)
-        let filter_params = if apply_filter {
-            Some(params.filter_params)
-        } else {
-            None
-        };
+        let shape = NoteShape::Skewtooth(1.0);
 
         // Get next sample
         let value = self
             .osc
-            .next_sample(sample_rate, params.shape, pitch, params.phase);
+            .next_sample(sample_rate, shape, pitch.hz(), params.phase());
 
-        // Apply filter (if desired)
-        let value = match filter_params {
-            Some(mut params) => {
-                let coefficents = FilterParams::into_coefficients(params, sample_rate);
-                self.filter.update_coefficients(coefficents);
-                let output = self.filter.run(value);
-                if output.is_finite() {
-                    output
-                } else {
-                    // If the output happens to be NaN or Infinity, output the
-                    // original  signal instead. Hopefully, this will "reset"
-                    // the filter on the next sample, instead of being filled
-                    // with garbage values.
-                    value
-                }
+        // Apply noise
+        let noise = NoteShape::Noise.get(0.0);
+        let value = value + noise * params.noise_mix();
+        // TODO: check if the noise is applied before or after the filter!
+
+        // Apply filter
+        let value = {
+            let filter = params.filter();
+            let filter_env = self.filter_env.get(&params.filter_envelope(), context);
+            let cutoff_freq = (filter.cutoff_freq.hz() * filter_env).hz();
+
+            let coefficents = biquad::Coefficients::<f32>::from_params(
+                filter.filter_type,
+                sample_rate.hz(),
+                cutoff_freq,
+                filter.q_value.max(0.0),
+            )
+            .unwrap();
+
+            self.filter.update_coefficients(coefficents);
+            let output = self.filter.run(value);
+            if output.is_finite() {
+                lerp(value, output, params.filter().dry_wet)
+            } else {
+                // If the output happens to be NaN or Infinity, output the
+                // original  signal instead. Hopefully, this will "reset"
+                // the filter on the next sample, instead of being filled
+                // with garbage values.
+                value
             }
-            None => value,
         };
+
         value * total_volume
     }
 
@@ -368,7 +350,7 @@ impl Oscillator {
     ///               the pitch of a note stays the same across sample rates
     /// shape - what noteshape to use for the signal
     /// pitch - the pitch multiplier to be applied to the base frequency of the
-    ///         oscillator. This is a unitless value.
+    ///         oscillator.
     /// phase_mod - how much to add to the current angle value to produce a
     ///             a phase offset. Units are 0.0-1.0 normalized angles (so
     ///             0.0 is zero radians, 1.0 is 2pi radians.)
@@ -376,7 +358,7 @@ impl Oscillator {
         &mut self,
         sample_rate: SampleRate,
         shape: NoteShape,
-        pitch: f32,
+        pitch: Hertz<f32>,
         phase_mod: f32,
     ) -> f32 {
         // Get the raw signal (we use rem_euclid here to constrain the angle
@@ -389,7 +371,7 @@ impl Oscillator {
         // complete waveform. We also multiply by pitch to advance the right amount
         // We also constrain the angle between 0 and 1, as this reduces
         // roundoff error.
-        let angle_delta = pitch / sample_rate;
+        let angle_delta = pitch.hz() / sample_rate.get();
         self.angle = (self.angle + angle_delta) % 1.0;
 
         value
@@ -436,7 +418,7 @@ impl<T: EnvelopeType> Envelope<T> {
         let value = match note_state {
             NoteState::None => T::zero(),
             NoteState::Held => {
-                let time = time as f32 / sample_rate;
+                let time = sample_rate.to_seconds(time);
                 let attack = params.attack();
                 let hold = params.hold();
                 let decay = params.decay();
@@ -457,7 +439,7 @@ impl<T: EnvelopeType> Envelope<T> {
                 }
             }
             NoteState::Released(rel_time) => {
-                let time = (time - rel_time) as f32 / sample_rate;
+                let time = sample_rate.to_seconds(time - rel_time);
                 T::lerp_release(self.ease_from, T::zero(), time / params.release())
             }
             NoteState::Retrigger(retrig_time) => {
@@ -483,35 +465,6 @@ impl<T: EnvelopeType> Envelope<T> {
     fn remember(&mut self) -> T {
         self.ease_from = self.last_env_value;
         self.ease_from
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct FilterParams {
-    pub filter: biquad::Type<f32>,
-    /// in [0.0 - 1.0] float range. When turning into an actual Hertz value,
-    /// this value is clamped between 20 and 99% of the Nyquist frequency
-    /// in order to prevent numerical instability at extremely high or low values
-    /// and/or blowing out the speakers.
-    pub freq: f32,
-    /// Must be non-negative. If it is negative, it will be clamped to zero
-    pub q_value: f32,
-}
-
-impl FilterParams {
-    fn into_coefficients(
-        params: FilterParams,
-        sample_rate: SampleRate,
-    ) -> biquad::Coefficients<f32> {
-        // convert normalized 0.0-1.0 to a frequency in Hertz
-        let freq = ease_in_poly(params.freq, 4).clamp(0.0, 1.0) * 22100.0;
-        // avoid numerical instability encountered at very low
-        // or high frequencies. Clamping at around 20 Hz also
-        // avoids blowing out the speakers.
-        let freq = freq.clamp(20.0, sample_rate * 0.99 / 2.0).hz();
-        let q_value = params.q_value.max(0.0);
-        biquad::Coefficients::<f32>::from_params(params.filter, sample_rate.hz(), freq, q_value)
-            .unwrap()
     }
 }
 
@@ -566,16 +519,6 @@ pub enum NoteShape {
 }
 
 impl NoteShape {
-    pub fn new(shape: NoteShapeDiscrim, warp: f32) -> NoteShape {
-        let warp = warp.clamp(0.0, 1.0);
-        match shape {
-            NoteShapeDiscrim::Sine => NoteShape::Sine,
-            NoteShapeDiscrim::Square => NoteShape::Square(warp),
-            NoteShapeDiscrim::Skewtooth => NoteShape::Skewtooth(warp),
-            NoteShapeDiscrim::Noise => NoteShape::Noise,
-        }
-    }
-
     /// Return the raw waveform using the given angle
     fn get(&self, angle: Angle) -> f32 {
         match self {
@@ -615,44 +558,6 @@ impl NoteShape {
             NoteShape::Noise => rand::Rng::gen_range(&mut rand::thread_rng(), -1.0..1.0),
         }
     }
-
-    /// Create a NoteShape using the given shape and warp. This is used for
-    /// RawParameters mainly.
-    pub fn from_f32s(shape: f32, warp: f32) -> Self {
-        NoteShape::new(
-            crate::params::EASER.shape.ease(shape),
-            crate::params::EASER.warp.ease(warp),
-        )
-    }
-
-    /// Add the warp of the given NoteShape with the modulation parameter. This
-    /// is used for note shape modulation.
-    fn add(&self, modulate: f32) -> Self {
-        use NoteShape::*;
-        match self {
-            Sine => Sine,
-            Square(warp) => Square((warp + modulate).clamp(0.0, 1.0)),
-            Skewtooth(warp) => Skewtooth((warp + modulate).clamp(0.0, 1.0)),
-            Noise => Noise,
-        }
-    }
-
-    pub fn get_warp(&self) -> f32 {
-        match self {
-            NoteShape::Square(warp) | NoteShape::Skewtooth(warp) => *warp,
-            // TODO: is it really okay to return 0.5 here?
-            NoteShape::Sine | NoteShape::Noise => 0.5,
-        }
-    }
-
-    pub fn get_shape(&self) -> NoteShapeDiscrim {
-        match self {
-            NoteShape::Sine => NoteShapeDiscrim::Sine,
-            NoteShape::Square(_) => NoteShapeDiscrim::Square,
-            NoteShape::Skewtooth(_) => NoteShapeDiscrim::Skewtooth,
-            NoteShape::Noise => NoteShapeDiscrim::Noise,
-        }
-    }
 }
 
 impl std::fmt::Display for NoteShape {
@@ -683,15 +588,8 @@ impl std::fmt::Display for NoteShape {
     }
 }
 
-#[derive(Debug, Clone, Copy, VariantCount, Serialize, Deserialize, PartialEq, Eq)]
-pub enum NoteShapeDiscrim {
-    Sine,
-    Square,
-    Skewtooth,
-    Noise,
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Add, Sub)]
+/// A struct representing Decibels.
 pub struct Decibel(f32);
 
 impl std::ops::Mul<f32> for Decibel {
@@ -835,7 +733,7 @@ pub fn to_pitch_envelope(
 // the type, so oh well.
 #[allow(non_snake_case)]
 /// Convert a U7 value into a normalized [0.0, 1.0] float.
-pub fn normalize_U7(num: U7) -> f32 {
+pub fn normalize_u7(num: U7) -> f32 {
     // A U7 in is in range [0, 127]
     let num = U7::data_to_bytes(&[num])[0];
     // convert to f32 - range [0.0, 1.0]
@@ -864,4 +762,37 @@ pub fn to_pitch_multiplier(pitch_bend: NormalizedPitchbend, semitones: i32) -> f
     // We take an exponential here because frequency is exponential with respect
     // to note value
     exponent.powf(pitch_bend)
+}
+
+/// The sample rate in Hz/seconds. Must be a positive value.
+#[derive(Debug, Clone, Copy)]
+pub struct SampleRate(pub f32);
+
+impl SampleRate {
+    pub fn new(rate: f32) -> Option<SampleRate> {
+        if rate <= 0.0 {
+            None
+        } else {
+            Some(SampleRate(rate))
+        }
+    }
+
+    pub fn get(&self) -> f32 {
+        self.0
+    }
+
+    pub fn to_seconds(&self, samples: SampleTime) -> Seconds {
+        let seconds = samples as f32 / self.get();
+        Seconds::new(seconds).unwrap()
+    }
+
+    pub fn hz(&self) -> biquad::Hertz<f32> {
+        self.get().hz()
+    }
+}
+
+impl From<f32> for SampleRate {
+    fn from(value: f32) -> Self {
+        SampleRate::new(value).unwrap()
+    }
 }

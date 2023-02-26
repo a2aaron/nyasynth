@@ -18,6 +18,7 @@ use std::{
 
 use backtrace::Backtrace;
 use once_cell::sync::Lazy;
+use params::MeowParameters;
 use vst::{
     api::{Events, Supported},
     buffer::AudioBuffer,
@@ -26,9 +27,8 @@ use vst::{
 };
 use wmidi::MidiMessage;
 
-use params::{ParameterType, Parameters, RawParameters};
 use sound_gen::{
-    normalize_U7, normalize_pitch_bend, to_pitch_envelope, NormalizedPitchbend, SampleRate,
+    normalize_pitch_bend, normalize_u7, to_pitch_envelope, NormalizedPitchbend, SampleRate,
     SoundGenerator,
 };
 
@@ -81,7 +81,7 @@ struct Revisit {
     /// The sample rate in Hz/sec (usually 44,100)
     sample_rate: SampleRate,
     /// The parameters which are shared with the VST host
-    params: Arc<RawParameters>,
+    params: Arc<MeowParameters>,
     /// Pitchbend messages. Format is (value, frame_delta) where
     /// value is a normalized f32 and frame_delta is the offset into the current
     /// frame for which the pitchbend value occurs
@@ -91,11 +91,11 @@ struct Revisit {
 }
 
 impl Plugin for Revisit {
-    fn new(host: HostCallback) -> Self {
+    fn new(_host: HostCallback) -> Self {
         Revisit {
-            params: Arc::new(RawParameters::new(host)),
+            params: Arc::new(MeowParameters::new()),
             notes: Vec::with_capacity(16),
-            sample_rate: 44100.0,
+            sample_rate: SampleRate::from(44100.0),
             pitch_bend: Vec::with_capacity(16),
             last_pitch_bend: 0.0,
         }
@@ -135,7 +135,7 @@ impl Plugin for Revisit {
             unique_id: 413612,
             version: 1,
             category: Category::Synth,
-            parameters: ParameterType::COUNT as i32,
+            parameters: MeowParameters::NUM_PARAMS as i32,
             // No audio inputs
             inputs: 0,
             // Two channel audio!
@@ -156,8 +156,6 @@ impl Plugin for Revisit {
     fn process(&mut self, buffer: &mut AudioBuffer<f32>) {
         let num_samples = buffer.samples();
 
-        let params = Parameters::from(self.params.as_ref());
-
         // Get the envelope from MIDI pitch bend
         let (pitch_bends, last_bend) =
             to_pitch_envelope(&self.pitch_bend, self.last_pitch_bend, num_samples);
@@ -173,7 +171,8 @@ impl Plugin for Revisit {
 
         for gen in &mut self.notes {
             for i in 0..num_samples {
-                let (left, right) = gen.next_sample(&params, i, self.sample_rate, pitch_bends[i]);
+                let (left, right) =
+                    gen.next_sample(&self.params, i, self.sample_rate, pitch_bends[i]);
                 left_out[i] += left;
                 right_out[i] += right;
             }
@@ -181,13 +180,12 @@ impl Plugin for Revisit {
 
         // Write sound
         for i in 0..num_samples {
-            output_buffer[0][i] = left_out[i] * params.master_vol.get_amp();
-            output_buffer[1][i] = right_out[i] * params.master_vol.get_amp();
+            output_buffer[0][i] = left_out[i];
+            output_buffer[1][i] = right_out[i];
         }
     }
 
     fn process_events(&mut self, events: &Events) {
-        let sample_rate = self.sample_rate;
         // remove "dead" notes
         // we do this in process_events _before_ processing any midi messages
         // because this is the start of a new frame, and we want to make sure
@@ -198,8 +196,15 @@ impl Plugin for Revisit {
         // - frame 1 - process removes dead note
         // - frame 1 - user is confused to why note does not play despite holding
         //             down key (the KeyOn event was "eaten" by the dead note!)
-        let params = Parameters::from(self.params.as_ref());
-        self.notes.retain(|gen| gen.is_alive(sample_rate, &params));
+        {
+            // this weird block is required because the closure in `retain` captures all of `self`
+            // if you pass it `self.sample_rate` or `self.params`. Doing it like this allows it to
+            // only capture the `params` field, which avoids the issue of cannot borrow while
+            // mutably borrowed
+            let sample_rate = self.sample_rate;
+            let params = &self.params;
+            self.notes.retain(|gen| gen.is_alive(sample_rate, &params));
+        }
 
         // Clear pitch bend to get new messages
         self.pitch_bend.clear();
@@ -211,13 +216,17 @@ impl Plugin for Revisit {
                         match message {
                             MidiMessage::NoteOn(_, note, vel) => {
                                 // On note on, either add or retrigger the note
-                                let vel = normalize_U7(vel);
+                                let vel = normalize_u7(vel);
                                 let gen = if let Some(osc) =
                                     self.notes.iter_mut().find(|gen| gen.note == note)
                                 {
                                     osc
                                 } else {
-                                    self.notes.push(SoundGenerator::new(note, vel, sample_rate));
+                                    self.notes.push(SoundGenerator::new(
+                                        note,
+                                        vel,
+                                        self.sample_rate,
+                                    ));
                                     self.notes.last_mut().unwrap()
                                 };
 
@@ -263,7 +272,14 @@ impl Plugin for Revisit {
     }
 
     fn set_sample_rate(&mut self, rate: f32) {
-        self.sample_rate = rate;
+        if let Some(rate) = SampleRate::new(rate) {
+            self.sample_rate = rate;
+        } else {
+            log::error!(
+                "Cannot set sample rate to {} (expected a positive value)",
+                rate
+            );
+        }
     }
 
     // The raw parameters exposed to the host
