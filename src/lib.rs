@@ -20,9 +20,10 @@ use common::SampleRate;
 use once_cell::sync::Lazy;
 use params::MeowParameters;
 use vst::{
-    api::{Events, Supported},
+    api::{Events, Supported, TimeInfoFlags},
     buffer::AudioBuffer,
     editor::Editor,
+    host::Host,
     plugin::{CanDo, Category, HostCallback, Info, Plugin, PluginParameters},
 };
 use wmidi::MidiMessage;
@@ -87,16 +88,22 @@ struct Revisit {
     pitch_bend: Vec<(NormalizedPitchbend, i32)>,
     /// The last pitch bend value from the previous frame.
     last_pitch_bend: NormalizedPitchbend,
+    /// The tempo, in beats per minute
+    tempo: f64,
+    /// The host callback
+    host: HostCallback,
 }
 
 impl Plugin for Revisit {
-    fn new(_host: HostCallback) -> Self {
+    fn new(host: HostCallback) -> Self {
         Revisit {
             params: Arc::new(MeowParameters::new()),
             notes: Vec::with_capacity(16),
             sample_rate: SampleRate::from(44100.0),
             pitch_bend: Vec::with_capacity(16),
             last_pitch_bend: 0.0,
+            tempo: 120.0,
+            host,
         }
     }
 
@@ -147,6 +154,7 @@ impl Plugin for Revisit {
     fn can_do(&self, can_do: CanDo) -> Supported {
         match can_do {
             CanDo::ReceiveMidiEvent => Supported::Yes,
+            CanDo::ReceiveTimeInfo => Supported::Yes,
             _ => Supported::No,
         }
     }
@@ -170,8 +178,13 @@ impl Plugin for Revisit {
 
         for gen in &mut self.notes {
             for i in 0..num_samples {
-                let (left, right) =
-                    gen.next_sample(&self.params, i, self.sample_rate, pitch_bends[i]);
+                let (left, right) = gen.next_sample(
+                    &self.params,
+                    i,
+                    self.sample_rate,
+                    pitch_bends[i],
+                    self.tempo as f32,
+                );
                 left_out[i] += left;
                 right_out[i] += right;
             }
@@ -255,6 +268,13 @@ impl Plugin for Revisit {
 
         // Sort pitch bend changes by delta_frame.
         self.pitch_bend.sort_unstable_by(|a, b| a.1.cmp(&b.1));
+
+        // Set tempo, if available.
+        if let Some(time_info) = self.host.get_time_info(TimeInfoFlags::TEMPO_VALID.bits()) {
+            if TimeInfoFlags::TEMPO_VALID.bits() & time_info.flags != 0 {
+                self.tempo = time_info.tempo;
+            }
+        }
     }
 
     fn suspend(&mut self) {

@@ -96,24 +96,6 @@ impl<T: Lerpable + InvLerpable> Easing<T> {
     }
 }
 
-pub struct DiscreteLinear<T, const N: usize> {
-    pub values: [T; N],
-}
-
-impl<T: Eq + Copy + Clone, const N: usize> DiscreteLinear<T, N> {
-    pub fn ease(&self, t: f32) -> T {
-        let index = (t * self.values.len() as f32).floor() as usize;
-        self.values[index.clamp(0, self.values.len() - 1)]
-    }
-
-    pub fn inv_ease(&self, val: T) -> f32 {
-        match self.values.iter().position(|&x| x == val) {
-            Some(index) => (index as f32) / (self.values.len() as f32),
-            None => 0.0,
-        }
-    }
-}
-
 /// Lerp between two values. This function is clamped.
 pub fn lerp<T: Lerpable>(start: T, end: T, t: f32) -> T {
     (end - start) * t.clamp(0.0, 1.0) + start
@@ -153,10 +135,6 @@ pub fn inv_ease_in_expo(x: f32) -> f32 {
     } else {
         ((2.0f32.powf(10.0) - 1.0) * x + 1.0).log2() / 10.0
     }
-}
-
-pub fn ease_in_poly(x: f32, i: i32) -> f32 {
-    x.powi(i)
 }
 
 /// Snap a float value in range 0.0-1.0 to the nearest f32 region

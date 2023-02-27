@@ -122,6 +122,7 @@ impl SoundGenerator {
         i: FrameDelta,
         sample_rate: SampleRate,
         pitch_bend: f32,
+        tempo: f32,
     ) -> (f32, f32) {
         let context = NoteContext {
             note_state: self.note_state,
@@ -180,9 +181,14 @@ impl SoundGenerator {
             }
         }
 
-        let osc_1 = self
-            .osc_1
-            .next_sample(&params, context, self.vel, self.note_pitch, pitch_bend);
+        let osc_1 = self.osc_1.next_sample(
+            &params,
+            context,
+            self.vel,
+            self.note_pitch,
+            pitch_bend,
+            tempo,
+        );
 
         (osc_1, osc_1)
     }
@@ -244,6 +250,7 @@ impl OSCGroup {
         base_vel: f32,
         base_note: Hertz<f32>,
         pitch_bend: f32,
+        tempo: f32,
     ) -> f32 {
         let sample_rate = context.sample_rate;
 
@@ -257,14 +264,13 @@ impl OSCGroup {
         // the signal allows for more interesting audio.
         let total_volume = base_vel * (params.master_vol() + vol_env).get_amp().max(0.0);
 
-        let vibrato_env = self.vibrato_env.get(&params.vibrato_lfo(), context);
+        let vibrato_params = params.vibrato_lfo(tempo);
+        let vibrato_env = self.vibrato_env.get(&vibrato_params, context);
         // Compute note pitch multiplier
-        let vibrato_lfo = self.vibrato_lfo.next_sample(
-            sample_rate,
-            NoteShape::Sine,
-            params.vibrato_lfo().freq(),
-            1.0,
-        ) * vibrato_env;
+        let vibrato_lfo =
+            self.vibrato_lfo
+                .next_sample(sample_rate, NoteShape::Sine, vibrato_params.freq(), 1.0)
+                * vibrato_env;
         let pitch_bend = to_pitch_multiplier(pitch_bend, params.pitchbend_max() as i32);
         let pitch_mods = to_pitch_multiplier(vibrato_lfo, 24);
 

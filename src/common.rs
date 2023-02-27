@@ -67,6 +67,12 @@ impl Seconds {
         let end = Seconds::new(end);
         Easing::Exponential { start, end }
     }
+
+    /// Interprets the seconds value as a period and converts it to Hz.
+    pub fn as_hz(&self) -> biquad::Hertz<f32> {
+        let hz = 1.0 / self.get();
+        hz.hz()
+    }
 }
 
 impl std::ops::Mul<f32> for Seconds {

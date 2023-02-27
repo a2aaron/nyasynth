@@ -19,6 +19,17 @@ const FILTER_TYPES: [biquad::Type<f32>; 4] = [
     biquad::Type::Notch,
 ];
 
+const VIBRATO_RATES: [VibratoRate; 8] = [
+    VibratoRate::FourBar,
+    VibratoRate::TwoBar,
+    VibratoRate::OneBar,
+    VibratoRate::Half,
+    VibratoRate::Quarter,
+    VibratoRate::Eighth,
+    VibratoRate::Twelfth,
+    VibratoRate::Sixteenth,
+];
+
 // Default values for master volume
 pub const DEFAULT_MASTER_VOL: f32 = 0.6875; // -3 dB
 
@@ -61,7 +72,7 @@ pub struct MeowParameters {
     meow_release: Parameter<Seconds>,
     vibrato_amount: Parameter<f32>,
     vibrato_attack: Parameter<Seconds>,
-    vibrato_rate: Parameter<Seconds>,
+    vibrato_rate: Parameter<I32Divable>,
     portamento_time: Parameter<Seconds>,
     noise_mix: Parameter<f32>,
     chorus_mix: Parameter<f32>,
@@ -91,7 +102,11 @@ impl MeowParameters {
         let meow_sustain = Decibel::ease_db(-24.0, 0.0);
         let meow_release = Seconds::ease_exp(0.001, 5.0);
         let vibrato_attack = Seconds::ease_exp(0.001, 2.0);
-        let vibrato_rate = Seconds::ease_exp(0.001, 2.0);
+        let vibrato_rate = Easing::SteppedLinear {
+            start: I32Divable(0),
+            end: I32Divable(VIBRATO_RATES.len() as i32 - 1),
+            steps: VIBRATO_RATES.len(),
+        };
         let portamento_time = Seconds::ease_exp(0.001, 2.0);
         let pitch_bend = Easing::SteppedLinear {
             start: I32Divable(1),
@@ -107,7 +122,7 @@ impl MeowParameters {
         let filter_decay = Seconds::ease_exp(0.001, 5.0);
         let filter_type = Easing::SteppedLinear {
             start: I32Divable(0),
-            end: I32Divable(FILTER_TYPES.len() as i32),
+            end: I32Divable(FILTER_TYPES.len() as i32 - 1),
             steps: 3,
         };
         let filter_cutoff_freq = Easing::Exponential {
@@ -125,7 +140,12 @@ impl MeowParameters {
                 DEFAULT_VIBRATO_ATTACK,
                 vibrato_attack,
             ),
-            vibrato_rate: Parameter::time("Vibrato Rate", DEFAULT_VIBRATO_RATE, vibrato_rate),
+            vibrato_rate: Parameter::new(
+                "Vibrato Rate",
+                NameFormatter::Unitless,
+                DEFAULT_VIBRATO_RATE,
+                vibrato_rate,
+            ),
             portamento_time: Parameter::time("Portamento", DEFAULT_PORTAMENTO, portamento_time),
             noise_mix: Parameter::percent("Noise", DEFAULT_NOISE_MIX),
             chorus_mix: Parameter::percent("Chorus", DEFAULT_CHORUS_MIX),
@@ -227,11 +247,27 @@ impl MeowParameters {
     }
 
     pub fn chorus(&self) -> ChorusParams {
-        todo!();
+        let rate = self.chorus_rate.get().hz();
+        let depth = self.chorus_depth.get();
+        let distance = self.chorus_distance.get();
+        ChorusParams {
+            rate,
+            depth,
+            distance,
+        }
     }
 
-    pub fn vibrato_lfo(&self) -> VibratoParams {
-        todo!()
+    pub fn vibrato_lfo(&self, tempo: f32) -> VibratoParams {
+        let speed_type = self.vibrato_rate.get().0;
+        assert!(0 <= speed_type && speed_type < VIBRATO_RATES.len() as i32);
+        let speed = VIBRATO_RATES[speed_type as usize].as_hz(tempo);
+        let amount = self.vibrato_amount.get();
+        let attack = self.vibrato_attack.get();
+        VibratoParams {
+            speed,
+            amount,
+            attack,
+        }
     }
 
     fn get(&self, index: i32) -> Option<ParameterView> {
@@ -494,7 +530,7 @@ impl Parameter<f32> {
 }
 
 pub struct ChorusParams {
-    rate: Seconds,
+    rate: Hertz<f32>,
     depth: f32,
     distance: f32,
 }
@@ -620,5 +656,48 @@ impl EnvelopeParams<f32> for VibratoParams {
 
     fn release(&self) -> Seconds {
         Seconds::ZERO
+    }
+}
+
+enum VibratoRate {
+    FourBar,
+    TwoBar,
+    OneBar,
+    Half,
+    Quarter,
+    Eighth,
+    Twelfth,
+    Sixteenth,
+}
+
+impl VibratoRate {
+    /// Converts the vibrato rate to herts, given a tempo in beats per minute
+    pub fn as_hz(&self, tempo: f32) -> biquad::Hertz<f32> {
+        let beats_per_seconds = tempo * 60.0;
+        let multiplier = match self {
+            VibratoRate::FourBar => 1.0 / 4.0,
+            VibratoRate::TwoBar => 1.0 / 2.0,
+            VibratoRate::OneBar => 1.0,
+            VibratoRate::Half => 2.0,
+            VibratoRate::Quarter => 4.0,
+            VibratoRate::Eighth => 8.0,
+            VibratoRate::Twelfth => 12.0,
+            VibratoRate::Sixteenth => 16.0,
+        };
+        let hertz = beats_per_seconds * multiplier;
+        hertz.hz()
+    }
+
+    pub const fn to_string(&self) -> &'static str {
+        match self {
+            VibratoRate::FourBar => "4 bars",
+            VibratoRate::TwoBar => "2 bars",
+            VibratoRate::OneBar => "1 bars",
+            VibratoRate::Half => "1/2",
+            VibratoRate::Quarter => "1/4",
+            VibratoRate::Eighth => "1/8",
+            VibratoRate::Twelfth => "1/12",
+            VibratoRate::Sixteenth => "1/16",
+        }
     }
 }
