@@ -1,14 +1,10 @@
 use std::ops::{Add, Div, Mul, Sub};
 
-pub trait Lerpable = Add<Self, Output = Self>
-    + Sub<Self, Output = Self>
-    + Mul<f32, Output = Self>
-    + Sized
-    + Copy
-    + Clone;
+// TODO: you could reduce the Copy bound to just Clone although it'd be more annoying to work with.
+pub trait Lerpable =
+    Add<Self, Output = Self> + Sub<Self, Output = Self> + Mul<f32, Output = Self> + Copy;
 
-pub trait InvLerpable =
-    Sub<Self, Output = Self> + Div<Self, Output = f32> + PartialEq + Sized + Copy + Clone;
+pub trait InvLerpable = Sub<Self, Output = Self> + Div<Self, Output = f32> + PartialEq + Copy;
 
 pub trait Easer<T>: Sync + Send {
     fn ease(&self, t: f32) -> T;
