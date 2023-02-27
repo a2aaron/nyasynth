@@ -1,22 +1,20 @@
 use biquad::{Hertz, ToHertz};
 use vst::{plugin::PluginParameters, util::AtomicFloat};
 
-use crate::ease::Easing;
-use crate::{
-    common::{Decibel, I32Divable, Seconds},
-    ease::{InvLerpable, Lerpable},
-};
+use crate::common::FilterType;
+use crate::common::{Decibel, I32Divable, Seconds};
+use crate::ease::{DiscreteLinear, Easer, Easing};
 
 const IDENTITY: Easing<f32> = Easing::Linear {
     start: 0.0,
     end: 1.0,
 };
 
-const FILTER_TYPES: [biquad::Type<f32>; 4] = [
-    biquad::Type::LowPass,
-    biquad::Type::HighPass,
-    biquad::Type::BandPass,
-    biquad::Type::Notch,
+const FILTER_TYPES: [FilterType; 4] = [
+    FilterType::LowPass,
+    FilterType::HighPass,
+    FilterType::BandPass,
+    FilterType::Notch,
 ];
 
 const VIBRATO_RATES: [VibratoRate; 8] = [
@@ -72,7 +70,7 @@ pub struct MeowParameters {
     meow_release: Parameter<Seconds>,
     vibrato_amount: Parameter<f32>,
     vibrato_attack: Parameter<Seconds>,
-    vibrato_rate: Parameter<I32Divable>,
+    vibrato_rate: Parameter<VibratoRate>,
     portamento_time: Parameter<Seconds>,
     noise_mix: Parameter<f32>,
     chorus_mix: Parameter<f32>,
@@ -85,7 +83,7 @@ pub struct MeowParameters {
     filter_envlope_mod: Parameter<f32>,
     filter_dry_wet: Parameter<f32>,
     filter_q: Parameter<f32>,
-    filter_type: Parameter<I32Divable>,
+    filter_type: Parameter<FilterType>,
     filter_cutoff_freq: Parameter<f32>,
     chorus_depth: Parameter<f32>,
     chorus_distance: Parameter<f32>,
@@ -97,15 +95,62 @@ impl MeowParameters {
     pub const NUM_PARAMS: usize = 23;
 
     pub fn new() -> MeowParameters {
+        fn filter_type_formatter(value: FilterType) -> (String, String) {
+            let value = match value {
+                FilterType::SinglePoleLowPass => "Low Pass (Single Pole)",
+                FilterType::LowPass => "Low Pass",
+                FilterType::HighPass => "High Pass",
+                FilterType::BandPass => "Band Pass",
+                FilterType::Notch => "Notch",
+            };
+            (value.to_string(), "".to_string())
+        }
+
+        fn vibrato_formatter(value: VibratoRate) -> (String, String) {
+            let value = match value {
+                VibratoRate::FourBar => "4 bars",
+                VibratoRate::TwoBar => "2 bars",
+                VibratoRate::OneBar => "1 bars",
+                VibratoRate::Half => "1/2",
+                VibratoRate::Quarter => "1/4",
+                VibratoRate::Eighth => "1/8",
+                VibratoRate::Twelfth => "1/12",
+                VibratoRate::Sixteenth => "1/16",
+            };
+            (value.to_string(), "".to_string())
+        }
+
+        fn semitone_formatter(value: I32Divable) -> (String, String) {
+            (format!("{}", value.0), "semis".to_string())
+        }
+
+        fn freq_formatter(value: f32) -> (String, String) {
+            if value < 1000.0 {
+                (format!("{:.2}", value), "Hz".to_string())
+            } else {
+                (format!("{:.2}", value / 1000.0), "kHz".to_string())
+            }
+        }
+
+        fn polycat_formatter(value: f32) -> (String, String) {
+            if value < 0.5 {
+                ("Off".to_string(), "".to_string())
+            } else {
+                ("On".to_string(), "".to_string())
+            }
+        }
+
+        fn angle_formatter(value: f32) -> (String, String) {
+            (format!("{}", value * 360.0), "deg".to_string())
+        }
+
         let meow_attack = Seconds::ease_exp(0.001, 2.0);
         let meow_decay = Seconds::ease_exp(0.001, 5.0);
         let meow_sustain = Decibel::ease_db(-24.0, 0.0);
         let meow_release = Seconds::ease_exp(0.001, 5.0);
         let vibrato_attack = Seconds::ease_exp(0.001, 2.0);
-        let vibrato_rate = Easing::SteppedLinear {
-            start: I32Divable(0),
-            end: I32Divable(VIBRATO_RATES.len() as i32 - 1),
-            steps: VIBRATO_RATES.len(),
+        let vibrato_rate = DiscreteLinear {
+            values: VIBRATO_RATES,
         };
         let portamento_time = Seconds::ease_exp(0.001, 2.0);
         let pitch_bend = Easing::SteppedLinear {
@@ -120,15 +165,14 @@ impl MeowParameters {
         let gain = Decibel::ease_db(-36.0, 12.0);
         let filter_attack = Seconds::ease_exp(0.001, 2.0);
         let filter_decay = Seconds::ease_exp(0.001, 5.0);
-        let filter_type = Easing::SteppedLinear {
-            start: I32Divable(0),
-            end: I32Divable(FILTER_TYPES.len() as i32 - 1),
-            steps: 3,
+        let filter_type = DiscreteLinear {
+            values: FILTER_TYPES,
         };
         let filter_cutoff_freq = Easing::Exponential {
             start: 20.0,
             end: 22100.0,
         };
+
         MeowParameters {
             meow_attack: Parameter::time("Meow Attack", DEFAULT_MEOW_ATTACK, meow_attack),
             meow_decay: Parameter::time("Meow Decay", DEFAULT_MEOW_DECAY, meow_decay),
@@ -142,20 +186,20 @@ impl MeowParameters {
             ),
             vibrato_rate: Parameter::new(
                 "Vibrato Rate",
-                NameFormatter::Unitless,
                 DEFAULT_VIBRATO_RATE,
                 vibrato_rate,
+                &vibrato_formatter,
             ),
             portamento_time: Parameter::time("Portamento", DEFAULT_PORTAMENTO, portamento_time),
             noise_mix: Parameter::percent("Noise", DEFAULT_NOISE_MIX),
             chorus_mix: Parameter::percent("Chorus", DEFAULT_CHORUS_MIX),
             pitch_bend: Parameter::new(
                 "Pitchbend",
-                NameFormatter::Semitones,
                 DEFAULT_PITCHBEND,
                 pitch_bend,
+                &semitone_formatter,
             ),
-            polycat: Parameter::new("Polycat", NameFormatter::Boolean, DEFAULT_POLYCAT, polycat),
+            polycat: Parameter::new("Polycat", DEFAULT_POLYCAT, polycat, &polycat_formatter),
             // Internal parameters (might not be exposed)
             gain: Parameter::decibel("Master Volume", DEFAULT_MASTER_VOL, gain),
             filter_attack: Parameter::time("Filter Attack", DEFAULT_FILTER_ATTACK, filter_attack),
@@ -165,20 +209,20 @@ impl MeowParameters {
             filter_q: Parameter::unitless("Filter Q", DEFAULT_FILTER_Q),
             filter_type: Parameter::new(
                 "Filter Type",
-                NameFormatter::FilterType,
                 DEFAULT_FILTER_TYPE,
                 filter_type,
+                &filter_type_formatter,
             ),
             filter_cutoff_freq: Parameter::new(
                 "Filter Cutoff",
-                NameFormatter::Frequency,
                 DEFAULT_FILTER_CUTOFF_FREQ,
                 filter_cutoff_freq,
+                &freq_formatter,
             ),
             chorus_depth: Parameter::unitless("Chorus Depth", DEFAULT_CHORUS_DEPTH),
             chorus_distance: Parameter::unitless("Chorus Distance", DEFAULT_CHORUS_DISTANCE),
             chorus_rate: Parameter::unitless("Chorus Rate", DEFAULT_CHORUS_RATE),
-            phase: Parameter::new("Phase", NameFormatter::Angle, DEFAULT_PHASE, IDENTITY),
+            phase: Parameter::new("Phase", DEFAULT_PHASE, IDENTITY, &angle_formatter),
         }
     }
 
@@ -224,9 +268,7 @@ impl MeowParameters {
         let q_value = self.filter_q.get();
         let dry_wet = self.filter_dry_wet.get();
 
-        let filter_type = self.filter_type.get().0;
-        assert!(0 <= filter_type && filter_type < FILTER_TYPES.len() as i32);
-        let filter_type = FILTER_TYPES[filter_type as usize];
+        let filter_type = self.filter_type.get().into();
         FilterParams {
             cutoff_freq,
             q_value,
@@ -258,9 +300,7 @@ impl MeowParameters {
     }
 
     pub fn vibrato_lfo(&self, tempo: f32) -> VibratoParams {
-        let speed_type = self.vibrato_rate.get().0;
-        assert!(0 <= speed_type && speed_type < VIBRATO_RATES.len() as i32);
-        let speed = VIBRATO_RATES[speed_type as usize].as_hz(tempo);
+        let speed = self.vibrato_rate.get().as_hz(tempo);
         let amount = self.vibrato_amount.get();
         let attack = self.vibrato_attack.get();
         VibratoParams {
@@ -304,7 +344,7 @@ impl MeowParameters {
 impl PluginParameters for MeowParameters {
     fn get_parameter_label(&self, index: i32) -> String {
         if let Some(parameter) = self.get(index) {
-            parameter.get_label()
+            parameter.text_unit
         } else {
             "".to_string()
         }
@@ -312,7 +352,7 @@ impl PluginParameters for MeowParameters {
 
     fn get_parameter_text(&self, index: i32) -> String {
         if let Some(parameter) = self.get(index) {
-            parameter.get_text()
+            parameter.text_value
         } else {
             "".to_string()
         }
@@ -356,22 +396,15 @@ impl PluginParameters for MeowParameters {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct ParameterView<'a> {
-    formatter: &'a NameFormatter,
     name: &'a str,
+    text_unit: String,
+    text_value: String,
     value: &'a AtomicFloat,
 }
 
 impl<'a> ParameterView<'a> {
-    fn get_label(&self) -> String {
-        self.formatter.get_label(self.get())
-    }
-
-    fn get_text(&self) -> String {
-        self.formatter.get_text(self.get())
-    }
-
     fn get(&self) -> f32 {
         self.value.get()
     }
@@ -381,151 +414,92 @@ impl<'a> ParameterView<'a> {
     }
 }
 
-#[derive(Debug)]
-enum NameFormatter {
-    Time,
-    Percent,
-    Decibel,
-    Angle,
-    Boolean,
-    Unitless,
-    Frequency,
-    Semitones,
-    FilterType,
-}
-
-impl NameFormatter {
-    fn get_text(&self, value: f32) -> String {
-        match self {
-            NameFormatter::Time => {
-                if value < 1.0 {
-                    format!("{:.1}", value * 1000.0)
-                } else {
-                    format!("{:.2}", value)
-                }
-            }
-            NameFormatter::Percent => format!("{:.2}", value * 100.0),
-            NameFormatter::Decibel => {
-                if value <= Decibel::NEG_INF_DB_THRESHOLD {
-                    "-inf".to_string()
-                } else if value < 0.0 {
-                    format!("{:.2}", value)
-                } else {
-                    format!("+{:.2}", value)
-                }
-            }
-            NameFormatter::Angle => format!("{:.2}", value * 360.0),
-            NameFormatter::Boolean => {
-                if value < 0.5 {
-                    "Off".to_string()
-                } else {
-                    "On".to_string()
-                }
-            }
-            NameFormatter::Unitless => format!("{:.3}", value),
-            NameFormatter::Frequency => {
-                if value < 1000.0 {
-                    format!("{:.2}", value)
-                } else {
-                    format!("{:.2}", value / 1000.0)
-                }
-            }
-            NameFormatter::Semitones => todo!(),
-            NameFormatter::FilterType => todo!(),
-        }
-    }
-
-    fn get_label(&self, value: f32) -> String {
-        match self {
-            NameFormatter::Time => {
-                if value < 1.0 {
-                    "ms".to_string()
-                } else {
-                    "sec".to_string()
-                }
-            }
-            NameFormatter::Percent => "%".to_string(),
-            NameFormatter::Decibel => "dB".to_string(),
-            NameFormatter::Angle => "deg".to_string(),
-            NameFormatter::Boolean => "".to_string(),
-            NameFormatter::Unitless => "".to_string(),
-            NameFormatter::Frequency => {
-                if value < 1000.0 {
-                    "Hz".to_string()
-                } else {
-                    "kHz".to_string()
-                }
-            }
-            NameFormatter::Semitones => "semis".to_string(),
-            NameFormatter::FilterType => "".to_string(),
-        }
-    }
-}
-
-#[derive(Debug)]
-struct Parameter<T> {
+struct Parameter<T: 'static> {
     name: &'static str,
-    /// The parameter text and label. The text is usually a number, such as "0.5" or "+7", and the
-    /// label is usually a unit like "ms" or "semis".
-    formatter: NameFormatter,
     value: AtomicFloat,
-    easer: Easing<T>,
+    easer: Box<dyn Easer<T>>,
+    formatter: &'static (dyn Fn(T) -> (String, String) + Send + Sync),
 }
 
 impl<T> Parameter<T> {
+    fn get(&self) -> T {
+        let value = self.get_raw();
+        self.easer.ease(value)
+    }
+
     fn get_raw(&self) -> f32 {
         self.value.get()
     }
 
     fn new(
         name: &'static str,
-        formatter: NameFormatter,
         default: f32,
-        easer: Easing<T>,
+        easer: impl Easer<T> + 'static,
+        formatter: &'static (dyn Fn(T) -> (String, String) + Send + Sync),
     ) -> Parameter<T> {
         Parameter {
             name,
-            formatter,
             value: default.into(),
-            easer,
+            easer: Box::new(easer),
+            formatter,
         }
     }
 
     fn view(&self) -> ParameterView {
+        let value = self.get();
+        let (text_value, text_unit) = (self.formatter)(value);
         ParameterView {
-            formatter: &self.formatter,
+            text_unit,
+            text_value,
             name: self.name,
             value: &self.value,
         }
     }
 }
 
-impl<T: Lerpable + InvLerpable> Parameter<T> {
-    fn get(&self) -> T {
-        let value = self.get_raw();
-        self.easer.ease(value)
-    }
-}
-
 impl Parameter<Seconds> {
     fn time(name: &'static str, default: f32, easer: Easing<Seconds>) -> Parameter<Seconds> {
-        Parameter::new(name, NameFormatter::Time, default, easer)
+        fn time_formatter(value: Seconds) -> (String, String) {
+            let value = value.get();
+            if value < 1.0 {
+                (format!("{:.1}", value * 1000.0), "ms".to_string())
+            } else {
+                (format!("{:.2}", value), "sec".to_string())
+            }
+        }
+        Parameter::new(name, default, easer, &time_formatter)
     }
 }
 
 impl Parameter<Decibel> {
     fn decibel(name: &'static str, default: f32, easer: Easing<Decibel>) -> Parameter<Decibel> {
-        Parameter::new(name, NameFormatter::Decibel, default, easer)
+        fn decibel_formatter(decibel: Decibel) -> (String, String) {
+            if decibel.get_db() <= Decibel::NEG_INF_DB_THRESHOLD {
+                ("-inf".to_string(), "dB".to_string())
+            } else if decibel.get_db() < 0.0 {
+                (format!("{:.2}", decibel.get_db()), "dB".to_string())
+            } else {
+                (format!("+{:.2}", decibel.get_db()), "dB".to_string())
+            }
+        }
+
+        Parameter::new(name, default, easer, &decibel_formatter)
     }
 }
 
 impl Parameter<f32> {
     fn percent(name: &'static str, default: f32) -> Parameter<f32> {
-        Parameter::new(name, NameFormatter::Percent, default, IDENTITY)
+        fn formatter(value: f32) -> (String, String) {
+            (format!("{:.3}", value * 1000.0), "%".to_string())
+        }
+        Parameter::new(name, default, IDENTITY, &formatter)
     }
 
     fn unitless(name: &'static str, default: f32) -> Parameter<f32> {
-        Parameter::new(name, NameFormatter::Unitless, default, IDENTITY)
+        fn formatter(value: f32) -> (String, String) {
+            (format!("{:.3}", value), "".to_string())
+        }
+        Parameter::new(name, default, IDENTITY, &formatter)
     }
 }
 
@@ -659,6 +633,7 @@ impl EnvelopeParams<f32> for VibratoParams {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum VibratoRate {
     FourBar,
     TwoBar,
@@ -686,142 +661,5 @@ impl VibratoRate {
         };
         let hertz = beats_per_seconds * multiplier;
         hertz.hz()
-    }
-}
-
-struct Percent(f32);
-struct Semitones(i32);
-struct Unitless(f32);
-
-pub trait ToParameterText {
-    /// The unit on the parameter label (Typically something such as "ms" or "semis").
-    /// If the unit is "unitless" (or otherwise should not display a label), this should return the
-    /// empty string.
-    fn to_label_unit(&self) -> String;
-    /// The value on the parameter label (Typically something such as "1.0" or "-5").
-    fn to_label_value(&self) -> String;
-}
-
-impl ToParameterText for bool {
-    fn to_label_unit(&self) -> String {
-        "".to_string()
-    }
-
-    fn to_label_value(&self) -> String {
-        if *self {
-            "On".to_string()
-        } else {
-            "Off".to_string()
-        }
-    }
-}
-
-impl ToParameterText for Unitless {
-    fn to_label_unit(&self) -> String {
-        "".to_string()
-    }
-
-    fn to_label_value(&self) -> String {
-        format!("{:.3}", self.0)
-    }
-}
-
-impl ToParameterText for Percent {
-    fn to_label_unit(&self) -> String {
-        "%".to_string()
-    }
-
-    fn to_label_value(&self) -> String {
-        format!("{:.2}", self.0 * 100.0)
-    }
-}
-
-impl ToParameterText for Semitones {
-    fn to_label_unit(&self) -> String {
-        if self.0 == 1 {
-            "semi".to_string()
-        } else {
-            "semis".to_string()
-        }
-    }
-
-    fn to_label_value(&self) -> String {
-        format!("{}", self.0)
-    }
-}
-
-impl<T> ToParameterText for biquad::Type<T> {
-    fn to_label_unit(&self) -> String {
-        "".to_string()
-    }
-
-    fn to_label_value(&self) -> String {
-        match self {
-            biquad::Type::SinglePoleLowPass => "Low Pass (Single Pole)".to_string(),
-            biquad::Type::LowPass => "Low Pass".to_string(),
-            biquad::Type::HighPass => "High Pass".to_string(),
-            biquad::Type::BandPass => "Band Pass".to_string(),
-            biquad::Type::Notch => "Notch".to_string(),
-            biquad::Type::AllPass => "All Pass".to_string(),
-            biquad::Type::LowShelf(_) => "Low Shelf".to_string(),
-            biquad::Type::HighShelf(_) => "High Shelf".to_string(),
-            biquad::Type::PeakingEQ(_) => "Peaking EQ".to_string(),
-        }
-    }
-}
-
-impl ToParameterText for Decibel {
-    fn to_label_unit(&self) -> String {
-        "db".to_string()
-    }
-
-    fn to_label_value(&self) -> String {
-        let value = self.get_db();
-        if value <= Decibel::NEG_INF_DB_THRESHOLD {
-            "-inf".to_string()
-        } else if value < 0.0 {
-            format!("{:.2}", value)
-        } else {
-            format!("+{:.2}", value)
-        }
-    }
-}
-
-impl ToParameterText for VibratoRate {
-    fn to_label_unit(&self) -> String {
-        "".to_string()
-    }
-
-    fn to_label_value(&self) -> String {
-        let string = match self {
-            VibratoRate::FourBar => "4 bars",
-            VibratoRate::TwoBar => "2 bars",
-            VibratoRate::OneBar => "1 bars",
-            VibratoRate::Half => "1/2",
-            VibratoRate::Quarter => "1/4",
-            VibratoRate::Eighth => "1/8",
-            VibratoRate::Twelfth => "1/12",
-            VibratoRate::Sixteenth => "1/16",
-        };
-        string.to_string()
-    }
-}
-
-impl ToParameterText for Seconds {
-    fn to_label_unit(&self) -> String {
-        if self.get() < 1.0 {
-            "ms".to_string()
-        } else {
-            "sec".to_string()
-        }
-    }
-
-    fn to_label_value(&self) -> String {
-        let value = self.get();
-        if value < 1.0 {
-            format!("{:.1}", value * 1000.0)
-        } else {
-            format!("{:.2}", value)
-        }
     }
 }

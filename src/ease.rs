@@ -7,7 +7,13 @@ pub trait Lerpable = Add<Self, Output = Self>
     + Copy
     + Clone;
 
-pub trait InvLerpable = Sub<Self, Output = Self> + Div<Self, Output = f32> + Sized + Copy + Clone;
+pub trait InvLerpable =
+    Sub<Self, Output = Self> + Div<Self, Output = f32> + PartialEq + Sized + Copy + Clone;
+
+pub trait Easer<T>: Sync + Send {
+    fn ease(&self, t: f32) -> T;
+    fn inv_ease(&self, val: T) -> f32;
+}
 
 /// An enum representing an ease.
 #[derive(Debug)]
@@ -30,10 +36,10 @@ pub enum Easing<T> {
     Exponential { start: T, end: T },
 }
 
-impl<T: Lerpable + InvLerpable> Easing<T> {
+impl<T: Lerpable + InvLerpable + Sync + Send> Easer<T> for Easing<T> {
     /// Ease using the given interpolation value `t`. `t` is expected to be in
     /// [0.0, 1.0] range.
-    pub fn ease(&self, t: f32) -> T {
+    fn ease(&self, t: f32) -> T {
         match *self {
             Easing::Linear { start, end } => lerp(start, end, t),
             Easing::SplitLinear {
@@ -64,7 +70,7 @@ impl<T: Lerpable + InvLerpable> Easing<T> {
     /// Given a value, return the `t` interpolation value such that `ease(t) == val`.
     /// inv_ease assumes easing functions are invertible, which might not be true
     /// for all functions (ex: SplitLinear that does not ease all the way to 1.0)
-    pub fn inv_ease(&self, val: T) -> f32 {
+    fn inv_ease(&self, val: T) -> f32 {
         match *self {
             Easing::Linear { start, end } => inv_lerp(start, end, val),
             Easing::SplitLinear {
@@ -92,6 +98,24 @@ impl<T: Lerpable + InvLerpable> Easing<T> {
                 let t = inv_lerp(start, end, val);
                 inv_ease_in_expo(t)
             }
+        }
+    }
+}
+
+pub struct DiscreteLinear<T, const N: usize> {
+    pub values: [T; N],
+}
+
+impl<T: Eq + Copy + Clone + Sync + Send, const N: usize> Easer<T> for DiscreteLinear<T, N> {
+    fn ease(&self, t: f32) -> T {
+        let index = (t * self.values.len() as f32).floor() as usize;
+        self.values[index.clamp(0, self.values.len() - 1)]
+    }
+
+    fn inv_ease(&self, val: T) -> f32 {
+        match self.values.iter().position(|&x| x == val) {
+            Some(index) => (index as f32) / (self.values.len() as f32),
+            None => 0.0,
         }
     }
 }

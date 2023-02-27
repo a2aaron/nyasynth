@@ -232,3 +232,40 @@ impl std::ops::Mul<f32> for I32Divable {
         I32Divable(((self.0 as f32) * rhs) as i32)
     }
 }
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum FilterType {
+    SinglePoleLowPass,
+    LowPass,
+    HighPass,
+    BandPass,
+    Notch,
+}
+
+impl From<biquad::Type<f32>> for FilterType {
+    fn from(value: biquad::Type<f32>) -> Self {
+        match value {
+            biquad::Type::SinglePoleLowPass => FilterType::SinglePoleLowPass,
+            biquad::Type::LowPass => FilterType::LowPass,
+            biquad::Type::HighPass => FilterType::HighPass,
+            biquad::Type::BandPass => FilterType::BandPass,
+            biquad::Type::Notch => FilterType::Notch,
+            biquad::Type::AllPass => todo!(),
+            biquad::Type::LowShelf(_) => todo!(),
+            biquad::Type::HighShelf(_) => todo!(),
+            biquad::Type::PeakingEQ(_) => todo!(),
+        }
+    }
+}
+
+impl From<FilterType> for biquad::Type<f32> {
+    fn from(value: FilterType) -> Self {
+        match value {
+            FilterType::SinglePoleLowPass => biquad::Type::SinglePoleLowPass,
+            FilterType::LowPass => biquad::Type::LowPass,
+            FilterType::HighPass => biquad::Type::HighPass,
+            FilterType::BandPass => biquad::Type::BandPass,
+            FilterType::Notch => biquad::Type::Notch,
+        }
+    }
+}
