@@ -16,6 +16,7 @@ variant_count = "1.0.0"
 derive_more = "0.99.11"
 backtrace = "0.3"
 biquad = "0.4.0"
+ordered-float = "3.4.0"
 
 # for GUI
 iced = { version = "0.3" }
@@ -33,11 +34,9 @@ keyboard-types = "0.5.0"
 tokio = { version = "1.0.0", features = ["sync"] }
 
 # for preset stuff
-serde_json = "1.0"
-serde = { version = "1.0", features = ["derive"] }
 directories = "4.0.1"
 once_cell = "1.7.2"
-ordered-float = "3.4.0"
+
 
 [profile.release]
 incremental = true

@@ -1,7 +1,6 @@
 use biquad::ToHertz;
 use derive_more::{Add, From, Into, Sub};
 use ordered_float::OrderedFloat;
-use serde::{Deserialize, Serialize};
 
 use crate::{
     ease::{lerp, Easing},
@@ -104,7 +103,7 @@ impl From<f32> for Seconds {
 }
 
 /// A struct representing Hertz.
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Add, Sub)]
+#[derive(Debug, Clone, Copy, PartialEq, Add, Sub)]
 pub struct Hertz(pub f32);
 
 impl From<biquad::Hertz<f32>> for Hertz {
@@ -134,7 +133,7 @@ impl std::ops::Div<Hertz> for Hertz {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Add, Sub)]
+#[derive(Debug, Clone, Copy, PartialEq, Add, Sub)]
 /// A struct representing Decibels. This struct can be used with [Easing] and [EnvelopeType]. Note
 /// that the specific implementation for EnvelopeType has decibels lerped in amplitude space for the
 /// attack of a note, and then lerped in dB space for the rest of the note. This is to ensure that
@@ -242,7 +241,7 @@ impl std::ops::Div<Decibel> for Decibel {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Add, Sub, Serialize, Deserialize, From, Into)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Add, Sub, From, Into)]
 /// An i32 which implements Lerpable (that is, can be multiplied by an f32). This is intended for
 /// parameters such as Coarse Tune, which typically snap to the nearest whole number (ex: can only
 /// take on integer values like "+2 semis").
