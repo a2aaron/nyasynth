@@ -291,10 +291,12 @@ impl MeowParameters {
         let rate = self.chorus_rate.get();
         let depth = self.chorus_depth.get();
         let distance = self.chorus_distance.get();
+        let mix = self.chorus_mix.get();
         ChorusParams {
             rate,
             depth,
             distance,
+            mix,
         }
     }
 
@@ -510,6 +512,7 @@ pub struct ChorusParams {
     rate: Hertz,
     depth: f32,
     distance: f32,
+    mix: f32,
 }
 
 // A set of immutable envelope parameters. The envelope is defined as follows:
