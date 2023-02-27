@@ -267,10 +267,12 @@ impl OSCGroup {
         let vibrato_params = params.vibrato_lfo(tempo);
         let vibrato_env = self.vibrato_env.get(&vibrato_params, context);
         // Compute note pitch multiplier
-        let vibrato_lfo =
-            self.vibrato_lfo
-                .next_sample(sample_rate, NoteShape::Sine, vibrato_params.freq(), 1.0)
-                * vibrato_env;
+        let vibrato_lfo = self.vibrato_lfo.next_sample(
+            sample_rate,
+            NoteShape::Sine,
+            vibrato_params.freq().into(),
+            1.0,
+        ) * vibrato_env;
         let pitch_bend = to_pitch_multiplier(pitch_bend, params.pitchbend_max() as i32);
         let pitch_mods = to_pitch_multiplier(vibrato_lfo, 24);
 
@@ -302,12 +304,12 @@ impl OSCGroup {
             let filter_env = self.filter_env.get(&params.filter_envelope(), context);
             let filter_env = (filter_env + base_vel) * params.filter_envelope().env_mod;
 
-            let cutoff_freq = (filter.cutoff_freq.hz() * filter_env).hz();
+            let cutoff_freq = filter.cutoff_freq * filter_env;
 
             let coefficents = biquad::Coefficients::<f32>::from_params(
                 filter.filter_type,
                 sample_rate.hz(),
-                cutoff_freq,
+                cutoff_freq.into(),
                 filter.q_value.max(0.0),
             )
             .unwrap();

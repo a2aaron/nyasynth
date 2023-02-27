@@ -97,6 +97,43 @@ impl From<Seconds> for f32 {
     }
 }
 
+impl From<f32> for Seconds {
+    fn from(value: f32) -> Self {
+        Seconds(value.into())
+    }
+}
+
+/// A struct representing Hertz.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Add, Sub)]
+pub struct Hertz(pub f32);
+
+impl From<biquad::Hertz<f32>> for Hertz {
+    fn from(value: biquad::Hertz<f32>) -> Self {
+        Hertz(value.hz())
+    }
+}
+
+impl From<Hertz> for biquad::Hertz<f32> {
+    fn from(value: Hertz) -> Self {
+        biquad::Hertz::<f32>::from_hz(value.0).unwrap()
+    }
+}
+
+impl std::ops::Mul<f32> for Hertz {
+    type Output = Hertz;
+
+    fn mul(self, rhs: f32) -> Self::Output {
+        Hertz(self.0 * rhs)
+    }
+}
+
+impl std::ops::Div<Hertz> for Hertz {
+    type Output = f32;
+    fn div(self, rhs: Hertz) -> Self::Output {
+        self.0 / rhs.0
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Add, Sub)]
 /// A struct representing Decibels. This struct can be used with [Easing] and [EnvelopeType]. Note
 /// that the specific implementation for EnvelopeType has decibels lerped in amplitude space for the
