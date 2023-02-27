@@ -687,9 +687,113 @@ impl VibratoRate {
         let hertz = beats_per_seconds * multiplier;
         hertz.hz()
     }
+}
 
-    pub const fn to_string(&self) -> &'static str {
+struct Percent(f32);
+struct Semitones(i32);
+struct Unitless(f32);
+
+pub trait ToParameterText {
+    /// The unit on the parameter label (Typically something such as "ms" or "semis").
+    /// If the unit is "unitless" (or otherwise should not display a label), this should return the
+    /// empty string.
+    fn to_label_unit(&self) -> String;
+    /// The value on the parameter label (Typically something such as "1.0" or "-5").
+    fn to_label_value(&self) -> String;
+}
+
+impl ToParameterText for bool {
+    fn to_label_unit(&self) -> String {
+        "".to_string()
+    }
+
+    fn to_label_value(&self) -> String {
+        if *self {
+            "On".to_string()
+        } else {
+            "Off".to_string()
+        }
+    }
+}
+
+impl ToParameterText for Unitless {
+    fn to_label_unit(&self) -> String {
+        "".to_string()
+    }
+
+    fn to_label_value(&self) -> String {
+        format!("{:.3}", self.0)
+    }
+}
+
+impl ToParameterText for Percent {
+    fn to_label_unit(&self) -> String {
+        "%".to_string()
+    }
+
+    fn to_label_value(&self) -> String {
+        format!("{:.2}", self.0 * 100.0)
+    }
+}
+
+impl ToParameterText for Semitones {
+    fn to_label_unit(&self) -> String {
+        if self.0 == 1 {
+            "semi".to_string()
+        } else {
+            "semis".to_string()
+        }
+    }
+
+    fn to_label_value(&self) -> String {
+        format!("{}", self.0)
+    }
+}
+
+impl<T> ToParameterText for biquad::Type<T> {
+    fn to_label_unit(&self) -> String {
+        "".to_string()
+    }
+
+    fn to_label_value(&self) -> String {
         match self {
+            biquad::Type::SinglePoleLowPass => "Low Pass (Single Pole)".to_string(),
+            biquad::Type::LowPass => "Low Pass".to_string(),
+            biquad::Type::HighPass => "High Pass".to_string(),
+            biquad::Type::BandPass => "Band Pass".to_string(),
+            biquad::Type::Notch => "Notch".to_string(),
+            biquad::Type::AllPass => "All Pass".to_string(),
+            biquad::Type::LowShelf(_) => "Low Shelf".to_string(),
+            biquad::Type::HighShelf(_) => "High Shelf".to_string(),
+            biquad::Type::PeakingEQ(_) => "Peaking EQ".to_string(),
+        }
+    }
+}
+
+impl ToParameterText for Decibel {
+    fn to_label_unit(&self) -> String {
+        "db".to_string()
+    }
+
+    fn to_label_value(&self) -> String {
+        let value = self.get_db();
+        if value <= Decibel::NEG_INF_DB_THRESHOLD {
+            "-inf".to_string()
+        } else if value < 0.0 {
+            format!("{:.2}", value)
+        } else {
+            format!("+{:.2}", value)
+        }
+    }
+}
+
+impl ToParameterText for VibratoRate {
+    fn to_label_unit(&self) -> String {
+        "".to_string()
+    }
+
+    fn to_label_value(&self) -> String {
+        let string = match self {
             VibratoRate::FourBar => "4 bars",
             VibratoRate::TwoBar => "2 bars",
             VibratoRate::OneBar => "1 bars",
@@ -698,6 +802,26 @@ impl VibratoRate {
             VibratoRate::Eighth => "1/8",
             VibratoRate::Twelfth => "1/12",
             VibratoRate::Sixteenth => "1/16",
+        };
+        string.to_string()
+    }
+}
+
+impl ToParameterText for Seconds {
+    fn to_label_unit(&self) -> String {
+        if self.get() < 1.0 {
+            "ms".to_string()
+        } else {
+            "sec".to_string()
+        }
+    }
+
+    fn to_label_value(&self) -> String {
+        let value = self.get();
+        if value < 1.0 {
+            format!("{:.1}", value * 1000.0)
+        } else {
+            format!("{:.2}", value)
         }
     }
 }
