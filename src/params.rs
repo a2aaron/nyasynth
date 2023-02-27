@@ -124,7 +124,7 @@ impl MeowParameters {
         }
 
         fn freq_formatter(hz: Hertz) -> (String, String) {
-            let hz = hz.0;
+            let hz = hz.get();
             if hz < 1000.0 {
                 (format!("{:.2}", hz), "Hz".to_string())
             } else {
@@ -162,13 +162,13 @@ impl MeowParameters {
             values: FILTER_TYPES,
         };
         let filter_cutoff_freq = Easing::Exponential {
-            start: Hertz(20.0),
-            end: Hertz(22100.0),
+            start: Hertz::new(20.0),
+            end: Hertz::new(22100.0),
         };
 
         let chorus_rate = Easing::Exponential {
-            start: Hertz(0.1),
-            end: Hertz(10.0),
+            start: Hertz::new(0.1),
+            end: Hertz::new(10.0),
         };
 
         MeowParameters {
@@ -418,7 +418,7 @@ impl<'a> ParameterView<'a> {
 struct Parameter<T> {
     name: &'static str,
     value: AtomicFloat,
-    easer: Box<dyn Easer<T>>,
+    easer: Box<dyn Easer<T> + Send + Sync>,
     formatter: fn(T) -> (String, String),
 }
 
@@ -435,7 +435,7 @@ impl<T> Parameter<T> {
     fn new(
         name: &'static str,
         default: f32,
-        easer: impl Easer<T> + 'static,
+        easer: impl Easer<T> + 'static + Send + Sync,
         formatter: fn(T) -> (String, String),
     ) -> Parameter<T> {
         Parameter {
@@ -605,16 +605,11 @@ pub struct FilterParams {
     pub dry_wet: f32,
 }
 
+#[derive(Debug)]
 pub struct VibratoParams {
-    speed: Hertz,
-    amount: f32,
-    attack: Seconds,
-}
-
-impl VibratoParams {
-    pub fn freq(&self) -> Hertz {
-        self.speed
-    }
+    pub speed: Hertz,
+    pub amount: f32,
+    pub attack: Seconds,
 }
 
 impl EnvelopeParams<f32> for VibratoParams {
@@ -627,15 +622,15 @@ impl EnvelopeParams<f32> for VibratoParams {
     }
 
     fn decay(&self) -> Seconds {
-        Seconds::ZERO
+        Seconds::new(0.001)
     }
 
     fn sustain(&self) -> f32 {
-        self.amount
+        1.0
     }
 
     fn release(&self) -> Seconds {
-        Seconds::ZERO
+        Seconds::new(0.001)
     }
 }
 
@@ -666,6 +661,6 @@ impl VibratoRate {
             VibratoRate::Sixteenth => 16.0,
         };
         let hertz = beats_per_seconds * multiplier;
-        Hertz(hertz)
+        Hertz::new(hertz)
     }
 }

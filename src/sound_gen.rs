@@ -265,12 +265,12 @@ impl OSCGroup {
         let total_volume = base_vel * (params.master_vol() + vol_env).get_amp().max(0.0);
 
         let vibrato_params = params.vibrato_lfo(tempo);
-        let vibrato_env = self.vibrato_env.get(&vibrato_params, context);
+        let vibrato_env = self.vibrato_env.get(&vibrato_params, context) * vibrato_params.amount;
         // Compute note pitch multiplier
         let vibrato_lfo = self.vibrato_lfo.next_sample(
             sample_rate,
             NoteShape::Sine,
-            vibrato_params.freq().into(),
+            vibrato_params.speed.into(),
             1.0,
         ) * vibrato_env;
         let pitch_bend = to_pitch_multiplier(pitch_bend, params.pitchbend_max() as i32);
@@ -304,12 +304,16 @@ impl OSCGroup {
             let filter_env = self.filter_env.get(&params.filter_envelope(), context);
             let filter_env = (filter_env + base_vel) * params.filter_envelope().env_mod;
 
-            let cutoff_freq = filter.cutoff_freq * filter_env;
+            let cutoff_freq = (filter.cutoff_freq * filter_env).get();
+            // avoid numerical instability encountered at very low
+            // or high frequencies. Clamping at around 20 Hz also
+            // avoids blowing out the speakers.
+            let cutoff_freq = cutoff_freq.clamp(20.0, sample_rate.0 * 0.99 / 2.0);
 
             let coefficents = biquad::Coefficients::<f32>::from_params(
                 filter.filter_type,
                 sample_rate.hz(),
-                cutoff_freq.into(),
+                cutoff_freq.hz(),
                 filter.q_value.max(0.0),
             )
             .unwrap();
@@ -429,13 +433,15 @@ impl<T: EnvelopeType> Envelope<T> {
                 let hold = params.hold();
                 let decay = params.decay();
                 let sustain = params.sustain();
-                if time < attack {
+                // We check if the attack time is zero. If so, we skip the attack phase.
+                if time < attack && attack.get() != 0.0 {
                     // Attack
                     T::lerp_attack(T::zero(), T::one(), time / attack)
                 } else if time < attack + hold {
                     // Hold
                     T::one()
-                } else if time < attack + hold + decay {
+                } else if time < attack + hold + decay && decay.get() != 0.0 {
+                    // Similarly, we check if decay is zero. If so, skikp right to sustain.
                     // Decay
                     let time = time - attack - hold;
                     T::lerp_decay(T::one(), sustain, time / decay)
@@ -446,7 +452,12 @@ impl<T: EnvelopeType> Envelope<T> {
             }
             NoteState::Released(rel_time) => {
                 let time = sample_rate.to_seconds(time - rel_time);
-                T::lerp_release(self.ease_from, T::zero(), time / params.release())
+                // If release is zero, then skip release and drop instantly to zero.
+                if params.release().get() != 0.0 {
+                    T::lerp_release(self.ease_from, T::zero(), time / params.release())
+                } else {
+                    T::zero()
+                }
             }
             NoteState::Retrigger(retrig_time) => {
                 // Forcibly decay over RETRIGGER_TIME.

@@ -104,7 +104,17 @@ impl From<f32> for Seconds {
 
 /// A struct representing Hertz.
 #[derive(Debug, Clone, Copy, PartialEq, Add, Sub)]
-pub struct Hertz(pub f32);
+pub struct Hertz(f32);
+
+impl Hertz {
+    pub fn new(hz: f32) -> Hertz {
+        Hertz(hz)
+    }
+
+    pub fn get(&self) -> f32 {
+        self.0
+    }
+}
 
 impl From<biquad::Hertz<f32>> for Hertz {
     fn from(value: biquad::Hertz<f32>) -> Self {
@@ -114,7 +124,9 @@ impl From<biquad::Hertz<f32>> for Hertz {
 
 impl From<Hertz> for biquad::Hertz<f32> {
     fn from(value: Hertz) -> Self {
-        biquad::Hertz::<f32>::from_hz(value.0).unwrap()
+        // biquad::Hertz does not accept negative Hertz.
+        let hz = value.get().max(0.0);
+        biquad::Hertz::<f32>::from_hz(hz).unwrap()
     }
 }
 

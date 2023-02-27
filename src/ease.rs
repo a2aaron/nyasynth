@@ -6,7 +6,7 @@ pub trait Lerpable =
 
 pub trait InvLerpable = Sub<Self, Output = Self> + Div<Self, Output = f32> + PartialEq + Copy;
 
-pub trait Easer<T>: Sync + Send {
+pub trait Easer<T> {
     fn ease(&self, t: f32) -> T;
     fn inv_ease(&self, val: T) -> f32;
 }
@@ -32,7 +32,7 @@ pub enum Easing<T> {
     Exponential { start: T, end: T },
 }
 
-impl<T: Lerpable + InvLerpable + Sync + Send> Easer<T> for Easing<T> {
+impl<T: Lerpable + InvLerpable> Easer<T> for Easing<T> {
     /// Ease using the given interpolation value `t`. `t` is expected to be in
     /// [0.0, 1.0] range.
     fn ease(&self, t: f32) -> T {
@@ -102,7 +102,7 @@ pub struct DiscreteLinear<T, const N: usize> {
     pub values: [T; N],
 }
 
-impl<T: Eq + Copy + Clone + Sync + Send, const N: usize> Easer<T> for DiscreteLinear<T, N> {
+impl<T: Eq + Copy, const N: usize> Easer<T> for DiscreteLinear<T, N> {
     fn ease(&self, t: f32) -> T {
         let index = (t * self.values.len() as f32).floor() as usize;
         self.values[index.clamp(0, self.values.len() - 1)]
