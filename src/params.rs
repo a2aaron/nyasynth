@@ -182,7 +182,7 @@ impl MeowParameters {
                 "Vibrato Rate",
                 DEFAULT_VIBRATO_RATE,
                 vibrato_rate,
-                &vibrato_formatter,
+                vibrato_formatter,
             ),
             portamento_time: Parameter::time("Portamento", DEFAULT_PORTAMENTO, 0.0001, 5.0),
             noise_mix: Parameter::percent("Noise", DEFAULT_NOISE_MIX),
@@ -191,9 +191,9 @@ impl MeowParameters {
                 "Pitchbend",
                 DEFAULT_PITCHBEND,
                 pitch_bend,
-                &semitone_formatter,
+                semitone_formatter,
             ),
-            polycat: Parameter::new("Polycat", DEFAULT_POLYCAT, polycat, &polycat_formatter),
+            polycat: Parameter::new("Polycat", DEFAULT_POLYCAT, polycat, polycat_formatter),
             // Internal parameters (might not be exposed)
             gain: Parameter::decibel("Master Volume", DEFAULT_MASTER_VOL, gain),
             filter_attack: Parameter::time("Filter Attack", DEFAULT_FILTER_ATTACK, 0.001, 2.0),
@@ -205,13 +205,13 @@ impl MeowParameters {
                 "Filter Type",
                 DEFAULT_FILTER_TYPE,
                 filter_type,
-                &filter_type_formatter,
+                filter_type_formatter,
             ),
             filter_cutoff_freq: Parameter::new(
                 "Filter Cutoff",
                 DEFAULT_FILTER_CUTOFF_FREQ,
                 filter_cutoff_freq,
-                &freq_formatter,
+                freq_formatter,
             ),
             chorus_depth: Parameter::unitless("Chorus Depth", DEFAULT_CHORUS_DEPTH),
             chorus_distance: Parameter::unitless("Chorus Distance", DEFAULT_CHORUS_DISTANCE),
@@ -219,9 +219,9 @@ impl MeowParameters {
                 "Chorus Rate",
                 DEFAULT_CHORUS_RATE,
                 chorus_rate,
-                &freq_formatter,
+                freq_formatter,
             ),
-            phase: Parameter::new("Phase", DEFAULT_PHASE, IDENTITY, &angle_formatter),
+            phase: Parameter::new("Phase", DEFAULT_PHASE, IDENTITY, angle_formatter),
         }
     }
 
@@ -415,11 +415,11 @@ impl<'a> ParameterView<'a> {
     }
 }
 
-struct Parameter<T: 'static> {
+struct Parameter<T> {
     name: &'static str,
     value: AtomicFloat,
     easer: Box<dyn Easer<T>>,
-    formatter: &'static (dyn Fn(T) -> (String, String) + Send + Sync),
+    formatter: fn(T) -> (String, String),
 }
 
 impl<T> Parameter<T> {
@@ -436,7 +436,7 @@ impl<T> Parameter<T> {
         name: &'static str,
         default: f32,
         easer: impl Easer<T> + 'static,
-        formatter: &'static (dyn Fn(T) -> (String, String) + Send + Sync),
+        formatter: fn(T) -> (String, String),
     ) -> Parameter<T> {
         Parameter {
             name,
@@ -472,7 +472,7 @@ impl Parameter<Seconds> {
             start: min.into(),
             end: max.into(),
         };
-        Parameter::new(name, default, easer, &time_formatter)
+        Parameter::new(name, default, easer, time_formatter)
     }
 }
 
@@ -488,7 +488,7 @@ impl Parameter<Decibel> {
             }
         }
 
-        Parameter::new(name, default, easer, &decibel_formatter)
+        Parameter::new(name, default, easer, decibel_formatter)
     }
 }
 
@@ -497,14 +497,14 @@ impl Parameter<f32> {
         fn formatter(value: f32) -> (String, String) {
             (format!("{:.3}", value * 1000.0), "%".to_string())
         }
-        Parameter::new(name, default, IDENTITY, &formatter)
+        Parameter::new(name, default, IDENTITY, formatter)
     }
 
     fn unitless(name: &'static str, default: f32) -> Parameter<f32> {
         fn formatter(value: f32) -> (String, String) {
             (format!("{:.3}", value), "".to_string())
         }
-        Parameter::new(name, default, IDENTITY, &formatter)
+        Parameter::new(name, default, IDENTITY, formatter)
     }
 }
 
