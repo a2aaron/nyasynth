@@ -495,7 +495,7 @@ impl Parameter<Decibel> {
 impl Parameter<f32> {
     fn percent(name: &'static str, default: f32) -> Parameter<f32> {
         fn formatter(value: f32) -> (String, String) {
-            (format!("{:.3}", value * 1000.0), "%".to_string())
+            (format!("{:.1}", value * 100.0), "%".to_string())
         }
         Parameter::new(name, default, IDENTITY, formatter)
     }
