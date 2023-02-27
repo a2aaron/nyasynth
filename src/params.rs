@@ -91,7 +91,7 @@ pub struct MeowParameters {
 }
 
 impl MeowParameters {
-    pub const NUM_PARAMS: usize = 23;
+    pub const NUM_PARAMS: usize = 24;
 
     pub fn new() -> MeowParameters {
         fn filter_type_formatter(value: FilterType) -> (String, String) {
@@ -336,6 +336,7 @@ impl MeowParameters {
             20 => self.chorus_distance.view(),
             21 => self.chorus_rate.view(),
             22 => self.phase.view(),
+            23 => self.gain.view(),
             _ => return None,
         };
         Some(view)
