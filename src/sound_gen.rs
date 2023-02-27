@@ -274,7 +274,7 @@ impl OSCGroup {
             1.0,
         ) * vibrato_env;
         let pitch_bend = to_pitch_multiplier(pitch_bend, params.pitchbend_max() as i32);
-        let pitch_mods = to_pitch_multiplier(vibrato_lfo, 24);
+        let pitch_mods = to_pitch_multiplier(vibrato_lfo, 2);
 
         // The final pitch multiplier, post-FM
         // Base note is the base note frequency, in hz

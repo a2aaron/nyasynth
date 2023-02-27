@@ -649,16 +649,16 @@ enum VibratoRate {
 impl VibratoRate {
     /// Converts the vibrato rate to herts, given a tempo in beats per minute
     pub fn as_hz(&self, tempo: f32) -> Hertz {
-        let beats_per_seconds = tempo * 60.0;
+        let beats_per_seconds = tempo / 60.0;
         let multiplier = match self {
-            VibratoRate::FourBar => 1.0 / 4.0,
-            VibratoRate::TwoBar => 1.0 / 2.0,
-            VibratoRate::OneBar => 1.0,
-            VibratoRate::Half => 2.0,
-            VibratoRate::Quarter => 4.0,
-            VibratoRate::Eighth => 8.0,
-            VibratoRate::Twelfth => 12.0,
-            VibratoRate::Sixteenth => 16.0,
+            VibratoRate::FourBar => 1.0 / 16.0,
+            VibratoRate::TwoBar => 1.0 / 8.0,
+            VibratoRate::OneBar => 1.0 / 4.0,
+            VibratoRate::Half => 1.0 / 2.0,
+            VibratoRate::Quarter => 1.0,
+            VibratoRate::Eighth => 2.0,
+            VibratoRate::Twelfth => 3.0,
+            VibratoRate::Sixteenth => 4.0,
         };
         let hertz = beats_per_seconds * multiplier;
         Hertz::new(hertz)
