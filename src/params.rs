@@ -31,7 +31,7 @@ const VIBRATO_RATES: [VibratoRate; 8] = [
 pub const DEFAULT_MASTER_VOL: f32 = 0.6875; // -3 dB
 
 // Default values for volume envelope
-pub const DEFAULT_MEOW_ATTACK: f32 = 0.1;
+pub const DEFAULT_MEOW_ATTACK: f32 = 0.6;
 pub const DEFAULT_MEOW_DECAY: f32 = 0.5; // ~200 ms
 pub const DEFAULT_MEOW_SUSTAIN: f32 = 0.75;
 pub const DEFAULT_MEOW_RELEASE: f32 = 0.3;
@@ -40,13 +40,13 @@ pub const DEFAULT_VIBRATO_AMOUNT: f32 = 0.0;
 pub const DEFAULT_VIBRATO_ATTACK: f32 = 0.0;
 pub const DEFAULT_VIBRATO_RATE: f32 = 0.0;
 
-pub const DEFAULT_FILTER_ATTACK: f32 = 0.0;
-pub const DEFAULT_FILTER_DECAY: f32 = 0.0;
-pub const DEFAULT_FILTER_ENVLOPE_MOD: f32 = 0.0;
+pub const DEFAULT_FILTER_ATTACK: f32 = 0.5;
+pub const DEFAULT_FILTER_DECAY: f32 = 0.5;
+pub const DEFAULT_FILTER_ENVLOPE_MOD: f32 = 1.0;
 pub const DEFAULT_FILTER_DRY_WET: f32 = 1.0; // 100% filter
-pub const DEFAULT_FILTER_Q: f32 = 0.1;
+pub const DEFAULT_FILTER_Q: f32 = 0.5;
 pub const DEFAULT_FILTER_TYPE: f32 = 0.0; // Low Pass
-pub const DEFAULT_FILTER_CUTOFF_FREQ: f32 = 0.0;
+pub const DEFAULT_FILTER_CUTOFF_FREQ: f32 = 0.6;
 
 pub const DEFAULT_CHORUS_MIX: f32 = 0.0;
 pub const DEFAULT_CHORUS_DEPTH: f32 = 0.0;
