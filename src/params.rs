@@ -31,10 +31,10 @@ const VIBRATO_RATES: [VibratoRate; 8] = [
 pub const DEFAULT_MASTER_VOL: f32 = 0.6875; // -3 dB
 
 // Default values for volume envelope
-pub const DEFAULT_MEOW_ATTACK: f32 = 0.6;
-pub const DEFAULT_MEOW_DECAY: f32 = 0.5; // ~200 ms
-pub const DEFAULT_MEOW_SUSTAIN: f32 = 0.75;
-pub const DEFAULT_MEOW_RELEASE: f32 = 0.3;
+pub const DEFAULT_MEOW_ATTACK: f32 = 0.3; // ~75 ms
+pub const DEFAULT_MEOW_DECAY: f32 = 0.8; // ~1.25 s
+pub const DEFAULT_MEOW_SUSTAIN: f32 = 0.2;
+pub const DEFAULT_MEOW_RELEASE: f32 = 0.3; // ~25 ms
 
 pub const DEFAULT_VIBRATO_AMOUNT: f32 = 0.0;
 pub const DEFAULT_VIBRATO_ATTACK: f32 = 0.0;
@@ -172,10 +172,10 @@ impl MeowParameters {
         };
 
         MeowParameters {
-            meow_attack: Parameter::time("Meow Attack", DEFAULT_MEOW_ATTACK, 0.001, 2.0),
+            meow_attack: Parameter::time("Meow Attack", DEFAULT_MEOW_ATTACK, 0.001, 10.0),
             meow_decay: Parameter::time("Meow Decay", DEFAULT_MEOW_DECAY, 0.001, 5.0),
             meow_sustain: Parameter::decibel("Meow Sustain", DEFAULT_MEOW_SUSTAIN, meow_sustain),
-            meow_release: Parameter::time("Meow Release", DEFAULT_MEOW_RELEASE, 0.001, 5.0),
+            meow_release: Parameter::time("Meow Release", DEFAULT_MEOW_RELEASE, 0.001, 4.0),
             vibrato_amount: Parameter::percent("Vibrato Amount", DEFAULT_VIBRATO_AMOUNT),
             vibrato_attack: Parameter::time("Vibrato Attack", DEFAULT_VIBRATO_ATTACK, 0.001, 5.0),
             vibrato_rate: Parameter::new(
