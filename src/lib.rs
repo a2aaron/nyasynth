@@ -17,7 +17,7 @@ use std::{
 };
 
 use backtrace::Backtrace;
-use common::SampleRate;
+use common::{SampleRate, Vel};
 use keys::KeyTracker;
 use once_cell::sync::Lazy;
 use params::MeowParameters;
@@ -30,9 +30,7 @@ use vst::{
 };
 use wmidi::MidiMessage;
 
-use sound_gen::{
-    normalize_pitch_bend, normalize_u7, to_pitch_envelope, NormalizedPitchbend, SoundGenerator,
-};
+use sound_gen::{normalize_pitch_bend, to_pitch_envelope, NormalizedPitchbend, SoundGenerator};
 
 static PROJECT_DIRS: Lazy<Option<directories::ProjectDirs>> =
     Lazy::new(|| directories::ProjectDirs::from("", "", "Nyasynth VST"));
@@ -231,7 +229,7 @@ impl Plugin for Nyasynth {
                     if let Ok(message) = message {
                         match message {
                             MidiMessage::NoteOn(_, note, vel) => {
-                                let vel = normalize_u7(vel);
+                                let vel = Vel::from(vel);
                                 let polycat = self.params.polycat();
                                 if polycat {
                                     // In polycat mode, we simply add the new note.
@@ -242,8 +240,6 @@ impl Plugin for Nyasynth {
                                     self.notes.push(gen);
                                 } else {
                                     // Monocat mode.
-                                    let needs_portamento =
-                                        self.key_tracker.note_on(note, vel, polycat).is_some();
                                     if self.notes.len() > 1 {
                                         log::warn!("More than one note playing in monocat mode? (noteon) {:?}", self.notes);
                                     }

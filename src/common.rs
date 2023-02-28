@@ -42,6 +42,40 @@ impl From<f32> for SampleRate {
     }
 }
 
+/// A normalized 0.0-1.0 float representation of a velocity value.
+#[derive(Debug, Clone, Copy, From)]
+pub struct Vel(pub f32);
+
+impl From<wmidi::U7> for Vel {
+    fn from(value: wmidi::U7) -> Self {
+        Vel(normalize_u7(value))
+    }
+}
+
+impl std::ops::Mul<f32> for Vel {
+    type Output = Vel;
+
+    fn mul(self, rhs: f32) -> Self::Output {
+        Vel(self.0 * rhs)
+    }
+}
+
+impl std::ops::Div for Vel {
+    type Output = f32;
+
+    fn div(self, rhs: Self) -> Self::Output {
+        self.0 / rhs.0
+    }
+}
+
+/// Convert a U7 value into a normalized [0.0, 1.0] float.
+pub fn normalize_u7(num: wmidi::U7) -> f32 {
+    // A U7 in is in range [0, 127]
+    let num = wmidi::U7::data_to_bytes(&[num])[0];
+    // convert to f32 - range [0.0, 1.0]
+    num as f32 / 127.0
+}
+
 /// A wrapper struct representing a duration of seconds. This struct implements [std::ops::Div], so
 /// it's possible to divide a [Seconds] by another [Seconds] and get an [f32].
 #[derive(Debug, Clone, Copy, Add, Sub, From, PartialEq, Eq, PartialOrd, Ord)]

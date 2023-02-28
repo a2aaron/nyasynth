@@ -1,5 +1,5 @@
 use crate::{
-    common::{self, Decibel, Hertz, SampleRate, SampleTime, Seconds},
+    common::{self, Decibel, Hertz, SampleRate, SampleTime, Seconds, Vel},
     ease::{ease_in_expo, lerp},
     neighbor_pairs::NeighborPairsIter,
     params::{EnvelopeParams, MeowParameters},
@@ -75,7 +75,7 @@ pub struct SoundGenerator {
     start_pitch: Hertz,
     // The velocity of the note that this SoundGenerator is playing, ignoring all
     // amplitude modulation effects. This is a 0.0 - 1.0 normalized value.
-    vel: f32,
+    vel: Vel,
     // The time, in samples, that this SoundGenerator has run since the last note on
     // event. This is NOT an interframe sample number!
     samples_since_note_on: SampleTime,
@@ -86,7 +86,7 @@ pub struct SoundGenerator {
     // If Some(frame_delta, vel), then a note on event occurs in the next frame
     // at sample `frame_delta` samples into the the frame, and the note has a
     // note velocity of `vel`
-    next_note_on: Option<(FrameDelta, f32)>,
+    next_note_on: Option<(FrameDelta, Vel)>,
     // If Some(frame_delta), then the next note off event occurs in the next frame
     // at `frame_delta` samples into the frame
     next_note_off: Option<FrameDelta>,
@@ -95,7 +95,7 @@ pub struct SoundGenerator {
 impl SoundGenerator {
     pub fn new(
         note: wmidi::Note,
-        vel: f32,
+        vel: Vel,
         sample_rate: SampleRate,
         bend_from: Option<wmidi::Note>,
     ) -> SoundGenerator {
@@ -204,7 +204,7 @@ impl SoundGenerator {
         (osc_1, osc_1)
     }
 
-    pub fn note_on(&mut self, frame_delta: i32, vel: f32) {
+    pub fn note_on(&mut self, frame_delta: i32, vel: Vel) {
         self.next_note_on = Some((frame_delta as usize, vel));
     }
 
@@ -227,7 +227,7 @@ impl SoundGenerator {
         portamento_time: Seconds,
         bend_from_current: bool,
         new_note: wmidi::Note,
-        new_vel: f32,
+        new_vel: Vel,
         frame_delta: i32,
     ) {
         let end_pitch = new_note.to_freq_f32().into();
@@ -308,7 +308,7 @@ impl OSCGroup {
         &mut self,
         params: &MeowParameters,
         context: NoteContext,
-        base_vel: f32,
+        base_vel: Vel,
         base_note: Hertz,
         pitch_bend: f32,
         tempo: f32,
@@ -323,7 +323,7 @@ impl OSCGroup {
         // signal to be inverted, which isn't what we want (instead it should
         // just have zero volume). We don't do this for the AmpMod because inverting
         // the signal allows for more interesting audio.
-        let total_volume = base_vel * (params.master_vol() + vol_env).get_amp().max(0.0);
+        let total_volume = base_vel.0 * (params.master_vol() + vol_env).get_amp().max(0.0);
 
         let vibrato_params = params.vibrato_lfo(tempo);
         let vibrato_env = self.vibrato_env.get(&vibrato_params, context) * vibrato_params.amount;
@@ -367,7 +367,7 @@ impl OSCGroup {
             // Easing sort of experimentally determined. See the following:
             // https://www.desmos.com/calculator/grjkm7iknd
             // https://docs.google.com/spreadsheets/d/174y4e5t8698O4-Wh9idkMVeZFb-L-7l8zLmDMGz-D-A/edit?usp=sharing
-            let base_vel_eased = ease_in_expo(base_vel);
+            let base_vel_eased = ease_in_expo(base_vel.0);
 
             let cutoff_freq = common::Hertz::lerp_octave(
                 filter.cutoff_freq,
@@ -719,17 +719,6 @@ pub fn to_pitch_envelope(
         });
 
     (iter, last_bend)
-}
-
-// rustc doesn't think "U7" is good snake case style, but its also the name of
-// the type, so oh well.
-#[allow(non_snake_case)]
-/// Convert a U7 value into a normalized [0.0, 1.0] float.
-pub fn normalize_u7(num: U7) -> f32 {
-    // A U7 in is in range [0, 127]
-    let num = U7::data_to_bytes(&[num])[0];
-    // convert to f32 - range [0.0, 1.0]
-    num as f32 / 127.0
 }
 
 /// Convert a PitchBend U14 value into a normalized [-1.0, 1.0] float

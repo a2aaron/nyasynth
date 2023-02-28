@@ -1,8 +1,10 @@
 use wmidi::Note;
 
+use crate::common::Vel;
+
 pub struct KeyTracker {
     /// A list of the currently held keys.
-    pub held_keys: Vec<(Note, f32)>,
+    pub held_keys: Vec<(Note, Vel)>,
     /// The note from which the next held note will be pitchbent from. If this is None, then
     /// the next held note will not have any pitchbend.
     pub portamento_key: Option<Note>,
@@ -18,7 +20,7 @@ impl KeyTracker {
 
     /// Handle a NoteOn event. This function returns Some if the note passed into the function should
     /// have portamento, and None if not.
-    pub fn note_on(&mut self, note: Note, vel: f32, polycat: bool) -> Option<Note> {
+    pub fn note_on(&mut self, note: Note, vel: Vel, polycat: bool) -> Option<Note> {
         self.held_keys.push((note, vel));
         if polycat {
             let portamento = self.portamento_key;
@@ -36,7 +38,7 @@ impl KeyTracker {
     /// of the stack to change. The returned value is the new top of stack. This is used in monocat
     /// mode, where removing the top-most note (aka: the only currently playing note) causes an
     /// internal note on event to occur.
-    pub fn note_off(&mut self, note: Note) -> Option<(Note, f32)> {
+    pub fn note_off(&mut self, note: Note) -> Option<(Note, Vel)> {
         if self.portamento_key == Some(note) {
             self.portamento_key = None;
         }
@@ -57,14 +59,5 @@ impl KeyTracker {
         } else {
             None
         }
-    }
-}
-
-// An normalized 0.0-1.0 float representation of a velocity value.
-pub struct Vel(pub f32);
-
-impl From<wmidi::U7> for Vel {
-    fn from(value: wmidi::U7) -> Self {
-        todo!()
     }
 }
