@@ -1,11 +1,11 @@
 use crate::{
-    common::{self, Decibel, SampleRate, SampleTime},
+    common::{self, Decibel, Hertz, SampleRate, SampleTime},
     ease::lerp,
     neighbor_pairs::NeighborPairsIter,
     params::{EnvelopeParams, MeowParameters},
 };
 
-use biquad::{Biquad, DirectForm1, Hertz, ToHertz, Q_BUTTERWORTH_F32};
+use biquad::{Biquad, DirectForm1, ToHertz, Q_BUTTERWORTH_F32};
 use variant_count::VariantCount;
 use wmidi::{PitchBend, U14, U7};
 
@@ -68,8 +68,8 @@ pub struct SoundGenerator {
     osc_1: OSCGroup,
     pub note: wmidi::Note,
     // The pitch of the note this SoundGenerator is playing, ignoring all coarse
-    // detune and pitch bend effects. This is in hertz.
-    note_pitch: Hertz<f32>,
+    // detune and pitch bend effects.
+    note_pitch: Hertz,
     // The velocity of the note that this SoundGenerator is playing, ignoring all
     // amplitude modulation effects. This is a 0.0 - 1.0 normalized value.
     vel: f32,
@@ -93,7 +93,7 @@ impl SoundGenerator {
     pub fn new(note: wmidi::Note, vel: f32, sample_rate: SampleRate) -> SoundGenerator {
         SoundGenerator {
             note,
-            note_pitch: wmidi::Note::to_freq_f32(note).hz(),
+            note_pitch: wmidi::Note::to_freq_f32(note).into(),
             vel,
             samples_since_note_on: 0,
             note_state: NoteState::None,
@@ -248,7 +248,7 @@ impl OSCGroup {
         params: &MeowParameters,
         context: NoteContext,
         base_vel: f32,
-        base_note: Hertz<f32>,
+        base_note: Hertz,
         pitch_bend: f32,
         tempo: f32,
     ) -> f32 {
@@ -283,14 +283,14 @@ impl OSCGroup {
         // Fine and course pitchbend come from the parameters.
         // The FM Mod comes from the modulation value.
         // Mod bank pitch comes from the mod bank.
-        let pitch = base_note.hz() * pitch_mods * pitch_bend;
+        let pitch = base_note * pitch_mods * pitch_bend;
 
         let shape = NoteShape::Skewtooth(1.0);
 
         // Get next sample
         let value = self
             .osc
-            .next_sample(sample_rate, shape, pitch.hz(), params.phase());
+            .next_sample(sample_rate, shape, pitch, params.phase());
 
         // Apply noise
         let noise = NoteShape::Noise.get(0.0);
@@ -372,7 +372,7 @@ impl Oscillator {
         &mut self,
         sample_rate: SampleRate,
         shape: NoteShape,
-        pitch: Hertz<f32>,
+        pitch: Hertz,
         phase_mod: f32,
     ) -> f32 {
         // Get the raw signal (we use rem_euclid here to constrain the angle
@@ -385,7 +385,7 @@ impl Oscillator {
         // complete waveform. We also multiply by pitch to advance the right amount
         // We also constrain the angle between 0 and 1, as this reduces
         // roundoff error.
-        let angle_delta = pitch.hz() / sample_rate.get();
+        let angle_delta = pitch.get() / sample_rate.get();
         self.angle = (self.angle + angle_delta) % 1.0;
 
         value
