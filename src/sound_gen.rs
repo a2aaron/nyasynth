@@ -1,5 +1,5 @@
 use crate::{
-    common::{self, Decibel, Hertz, SampleRate, SampleTime},
+    common::{self, Decibel, Hertz, SampleRate, SampleTime, Seconds},
     ease::{ease_in_expo, lerp},
     neighbor_pairs::NeighborPairsIter,
     params::{EnvelopeParams, MeowParameters},
@@ -64,12 +64,15 @@ impl EnvelopeType for f32 {
     }
 }
 
+#[derive(Debug)]
 pub struct SoundGenerator {
     osc_1: OSCGroup,
     pub note: wmidi::Note,
-    // The pitch of the note this SoundGenerator is playing, ignoring all coarse
-    // detune and pitch bend effects.
-    note_pitch: Hertz,
+    // The ending pitch from which portamento ends up at. This and `start_pitch` are unaffected by
+    // by pitch bend and pitch modifiers.
+    end_pitch: Hertz,
+    // The starting pitch from which portamento bends from.
+    start_pitch: Hertz,
     // The velocity of the note that this SoundGenerator is playing, ignoring all
     // amplitude modulation effects. This is a 0.0 - 1.0 normalized value.
     vel: f32,
@@ -90,10 +93,22 @@ pub struct SoundGenerator {
 }
 
 impl SoundGenerator {
-    pub fn new(note: wmidi::Note, vel: f32, sample_rate: SampleRate) -> SoundGenerator {
+    pub fn new(
+        note: wmidi::Note,
+        vel: f32,
+        sample_rate: SampleRate,
+        bend_from: Option<wmidi::Note>,
+    ) -> SoundGenerator {
+        let end_pitch = note.to_freq_f32().into();
+        let start_pitch = if let Some(note) = bend_from {
+            note.to_freq_f32().into()
+        } else {
+            end_pitch
+        };
         SoundGenerator {
             note,
-            note_pitch: wmidi::Note::to_freq_f32(note).into(),
+            start_pitch,
+            end_pitch,
             vel,
             samples_since_note_on: 0,
             note_state: NoteState::None,
@@ -124,11 +139,7 @@ impl SoundGenerator {
         pitch_bend: f32,
         tempo: f32,
     ) -> (f32, f32) {
-        let context = NoteContext {
-            note_state: self.note_state,
-            sample_rate,
-            samples_since_note_on: self.samples_since_note_on,
-        };
+        let context = self.get_note_context(sample_rate);
 
         // Only advance time if the note is being held down.
         match self.note_state {
@@ -185,7 +196,7 @@ impl SoundGenerator {
             &params,
             context,
             self.vel,
-            self.note_pitch,
+            self.get_current_pitch(sample_rate, params.portamento_time()),
             pitch_bend,
             tempo,
         );
@@ -200,8 +211,58 @@ impl SoundGenerator {
     pub fn note_off(&mut self, frame_delta: i32) {
         self.next_note_off = Some(frame_delta as usize);
     }
+
+    pub fn is_released(&self) -> bool {
+        match self.note_state {
+            NoteState::Released(_) => true,
+            NoteState::None => false,
+            NoteState::Held => false,
+            NoteState::Retrigger(_) => false,
+        }
+    }
+
+    pub fn retrigger(
+        &mut self,
+        sample_rate: SampleRate,
+        portamento_time: Seconds,
+        bend_from_current: bool,
+        new_note: wmidi::Note,
+        new_vel: f32,
+        frame_delta: i32,
+    ) {
+        let end_pitch = new_note.to_freq_f32().into();
+        if bend_from_current {
+            self.start_pitch = self.get_current_pitch(sample_rate, portamento_time);
+        } else {
+            self.start_pitch = end_pitch;
+        }
+        self.note = new_note;
+        self.end_pitch = end_pitch;
+        self.osc_1.filter_env.remember();
+        self.osc_1.vol_env.remember();
+        self.next_note_on = Some((frame_delta as usize, new_vel));
+        self.next_note_off = None;
+    }
+
+    fn get_note_context(&self, sample_rate: SampleRate) -> NoteContext {
+        NoteContext {
+            note_state: self.note_state,
+            sample_rate,
+            samples_since_note_on: self.samples_since_note_on,
+        }
+    }
+
+    fn get_current_pitch(&self, sample_rate: SampleRate, portamento_time: Seconds) -> Hertz {
+        let context = self.get_note_context(sample_rate);
+        let time = context
+            .sample_rate
+            .to_seconds(context.samples_since_note_on);
+        let t = (time / portamento_time).clamp(0.0, 1.0);
+        Hertz::lerp_octave(self.start_pitch, self.end_pitch, t)
+    }
 }
 
+#[derive(Debug)]
 struct OSCGroup {
     osc: Oscillator,
     vol_env: Envelope<Decibel>,

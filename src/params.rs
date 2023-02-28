@@ -58,7 +58,7 @@ const DEFAULT_PHASE: f32 = 0.0;
 const DEFAULT_NOISE_MIX: f32 = 0.0;
 
 const DEFAULT_PITCHBEND: I32Divable = I32Divable(12); // +12 semis
-const DEFAULT_PORTAMENTO: Seconds = Seconds::new(0.5);
+const DEFAULT_PORTAMENTO: Seconds = Seconds::new(120.0 / 1000.0);
 const DEFAULT_POLYCAT: f32 = 0.0; // Off
 
 pub struct MeowParameters {

@@ -5,6 +5,7 @@ extern crate vst;
 
 mod common;
 mod ease;
+mod keys;
 mod neighbor_pairs;
 mod params;
 mod sound_gen;
@@ -17,6 +18,7 @@ use std::{
 
 use backtrace::Backtrace;
 use common::SampleRate;
+use keys::KeyTracker;
 use once_cell::sync::Lazy;
 use params::MeowParameters;
 use vst::{
@@ -90,6 +92,7 @@ struct Nyasynth {
     last_pitch_bend: NormalizedPitchbend,
     /// The tempo, in beats per minute
     tempo: f64,
+    key_tracker: KeyTracker,
     /// The host callback
     host: HostCallback,
 }
@@ -101,6 +104,7 @@ impl Plugin for Nyasynth {
             notes: Vec::with_capacity(16),
             sample_rate: SampleRate::from(44100.0),
             pitch_bend: Vec::with_capacity(16),
+            key_tracker: KeyTracker::new(),
             last_pitch_bend: 0.0,
             tempo: 120.0,
             host,
@@ -227,29 +231,87 @@ impl Plugin for Nyasynth {
                     if let Ok(message) = message {
                         match message {
                             MidiMessage::NoteOn(_, note, vel) => {
-                                // On note on, either add or retrigger the note
                                 let vel = normalize_u7(vel);
-                                let gen = if let Some(osc) =
-                                    self.notes.iter_mut().find(|gen| gen.note == note)
-                                {
-                                    osc
+                                let polycat = self.params.polycat();
+                                if polycat {
+                                    // In polycat mode, we simply add the new note.
+                                    let bend_note = self.key_tracker.note_on(note, vel, polycat);
+                                    let mut gen =
+                                        SoundGenerator::new(note, vel, self.sample_rate, bend_note);
+                                    gen.note_on(event.delta_frames, vel);
+                                    self.notes.push(gen);
                                 } else {
-                                    self.notes.push(SoundGenerator::new(
-                                        note,
-                                        vel,
-                                        self.sample_rate,
-                                    ));
-                                    self.notes.last_mut().unwrap()
-                                };
+                                    // Monocat mode.
+                                    let needs_portamento =
+                                        self.key_tracker.note_on(note, vel, polycat).is_some();
+                                    if self.notes.len() > 1 {
+                                        log::warn!("More than one note playing in monocat mode? (noteon) {:?}", self.notes);
+                                    }
 
-                                gen.note_on(event.delta_frames, vel);
+                                    // If there are no generators playing, start a new note
+                                    if self.notes.len() == 0 {
+                                        let mut gen =
+                                            SoundGenerator::new(note, vel, self.sample_rate, None);
+                                        gen.note_on(event.delta_frames, vel);
+                                        self.notes.push(gen);
+                                    } else {
+                                        // If there is a generator playing, retrigger it. If the generator is release state
+                                        // then also do portamento.
+                                        let bend_from_current = !self.notes[0].is_released();
+                                        self.notes[0].retrigger(
+                                            self.sample_rate,
+                                            self.params.portamento_time(),
+                                            bend_from_current,
+                                            note,
+                                            vel,
+                                            event.delta_frames,
+                                        );
+                                    }
+                                };
                             }
                             MidiMessage::NoteOff(_, note, _) => {
-                                // On note off, send note off
-                                if let Some(i) = self.notes.iter().position(|gen| gen.note == note)
-                                {
-                                    let gen = &mut self.notes[i];
-                                    gen.note_off(event.delta_frames);
+                                let polycat = self.params.polycat();
+                                if polycat {
+                                    // On note off, send note off to all sound generators matching the note
+                                    // This is done only to notes which are not yet released
+                                    for gen in self
+                                        .notes
+                                        .iter_mut()
+                                        .filter(|gen| !gen.is_released() && gen.note == note)
+                                    {
+                                        gen.note_off(event.delta_frames);
+                                    }
+                                    self.key_tracker.note_off(note);
+                                } else {
+                                    let top_of_stack = self.key_tracker.note_off(note);
+                                    // Monocat mode.
+                                    if self.notes.len() > 1 {
+                                        log::warn!("More than one note playing in monocat mode? (noteoff) {:?}", self.notes);
+                                    }
+
+                                    if self.key_tracker.held_keys.len() == 0 {
+                                        // If there aren't any notes currently being held anymore, just send note off
+                                        self.notes
+                                            .iter_mut()
+                                            .for_each(|x| x.note_off(event.delta_frames));
+                                    } else {
+                                        // If there is a sound playing and the key tracker has a new top-of-stack note,
+                                        // then ask the generator retrigger.
+                                        match (self.notes.first_mut(), top_of_stack) {
+                                            (None, None) => (),
+                                            (None, Some(_)) => (),
+                                            (Some(_), None) => (),
+                                            (Some(gen), Some((new_note, new_vel))) => gen
+                                                .retrigger(
+                                                    self.sample_rate,
+                                                    self.params.portamento_time(),
+                                                    true,
+                                                    new_note,
+                                                    new_vel,
+                                                    event.delta_frames,
+                                                ),
+                                        }
+                                    }
                                 }
                             }
                             MidiMessage::PitchBendChange(_, pitch_bend) => {
