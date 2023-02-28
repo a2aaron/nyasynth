@@ -34,7 +34,7 @@ pub const DEFAULT_MASTER_VOL: f32 = 0.6875; // -3 dB
 pub const DEFAULT_MEOW_ATTACK: f32 = 0.3; // ~75 ms
 pub const DEFAULT_MEOW_DECAY: f32 = 0.8; // ~1.25 s
 pub const DEFAULT_MEOW_SUSTAIN: f32 = 0.2;
-pub const DEFAULT_MEOW_RELEASE: f32 = 0.3; // ~25 ms
+pub const DEFAULT_MEOW_RELEASE: f32 = 0.6; // ~400 ms
 
 pub const DEFAULT_VIBRATO_AMOUNT: f32 = 0.0;
 pub const DEFAULT_VIBRATO_ATTACK: f32 = 0.0;
