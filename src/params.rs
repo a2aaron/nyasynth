@@ -28,38 +28,38 @@ const VIBRATO_RATES: [VibratoRate; 8] = [
 ];
 
 // Default values for master volume
-pub const DEFAULT_MASTER_VOL: f32 = 0.6875; // -3 dB
+const DEFAULT_MASTER_VOL: Decibel = Decibel::from_db(-3.0); // -3 dB
 
 // Default values for volume envelope
-pub const DEFAULT_MEOW_ATTACK: f32 = 0.30994564; // ~75 ms
-pub const DEFAULT_MEOW_DECAY: f32 = 0.8; // ~1.25 s
-pub const DEFAULT_MEOW_SUSTAIN: f32 = 0.2;
-pub const DEFAULT_MEOW_RELEASE: f32 = 0.6; // ~400 ms
+const DEFAULT_MEOW_ATTACK: Seconds = Seconds::new(30.0 / 1000.0);
+const DEFAULT_MEOW_DECAY: Seconds = Seconds::new(1.25);
+const DEFAULT_MEOW_SUSTAIN: Decibel = Decibel::from_db(-15.0);
+const DEFAULT_MEOW_RELEASE: Seconds = Seconds::new(400.0 / 1000.0);
 
-pub const DEFAULT_VIBRATO_AMOUNT: f32 = 0.0;
-pub const DEFAULT_VIBRATO_ATTACK: f32 = 0.0;
-pub const DEFAULT_VIBRATO_RATE: f32 = 0.0;
+const DEFAULT_VIBRATO_AMOUNT: f32 = 0.0;
+const DEFAULT_VIBRATO_ATTACK: Seconds = Seconds::new(0.0);
+const DEFAULT_VIBRATO_RATE: VibratoRate = VibratoRate::Eighth;
 
-pub const DEFAULT_FILTER_ATTACK: f32 = 0.5;
-pub const DEFAULT_FILTER_DECAY: f32 = 0.5;
-pub const DEFAULT_FILTER_ENVLOPE_MOD: f32 = 0.8344; // ~7000 Hz
-pub const DEFAULT_FILTER_DRY_WET: f32 = 1.0; // 100% filter
-pub const DEFAULT_FILTER_Q: f32 = 0.25; // ~2.5
-pub const DEFAULT_FILTER_TYPE: f32 = 0.0; // Low Pass
-pub const DEFAULT_FILTER_CUTOFF_FREQ: f32 = 0.40258616; // ~350 Hz, which will be around 7350 at max meow sustain on max velocity.
+const DEFAULT_FILTER_ATTACK: Seconds = Seconds::new(0.0);
+const DEFAULT_FILTER_DECAY: Seconds = Seconds::new(0.0);
+const DEFAULT_FILTER_ENVLOPE_MOD: Hertz = Hertz(7000.0);
+const DEFAULT_FILTER_DRY_WET: f32 = 1.0; // 100% filter
+const DEFAULT_FILTER_Q: f32 = 2.5;
+const DEFAULT_FILTER_TYPE: FilterType = FilterType::LowPass; // Low Pass
+const DEFAULT_FILTER_CUTOFF_FREQ: Hertz = Hertz(350.0); // this which will be around 7350 at max meow sustain on max velocity.
 
-pub const DEFAULT_CHORUS_MIX: f32 = 0.0;
-pub const DEFAULT_CHORUS_DEPTH: f32 = 0.0;
-pub const DEFAULT_CHORUS_DISTANCE: f32 = 0.0;
-pub const DEFAULT_CHORUS_RATE: f32 = 0.0;
+const DEFAULT_CHORUS_MIX: f32 = 0.0;
+const DEFAULT_CHORUS_DEPTH: f32 = 0.0;
+const DEFAULT_CHORUS_DISTANCE: f32 = 0.0;
+const DEFAULT_CHORUS_RATE: Hertz = Hertz(1.0);
 
-pub const DEFAULT_PHASE: f32 = 0.0;
+const DEFAULT_PHASE: f32 = 0.0;
 
-pub const DEFAULT_NOISE_MIX: f32 = 0.0;
+const DEFAULT_NOISE_MIX: f32 = 0.0;
 
-pub const DEFAULT_PITCHBEND: f32 = 1.0; // +12 semis
-pub const DEFAULT_PORTAMENTO: f32 = 0.3;
-pub const DEFAULT_POLYCAT: f32 = 0.0; // Off
+const DEFAULT_PITCHBEND: I32Divable = I32Divable(12); // +12 semis
+const DEFAULT_PORTAMENTO: Seconds = Seconds::new(0.5);
+const DEFAULT_POLYCAT: f32 = 0.0; // Off
 
 pub struct MeowParameters {
     // Public parameters (exposed in UI)
@@ -440,10 +440,11 @@ impl<T> Parameter<T> {
 
     fn new(
         name: &'static str,
-        default: f32,
+        default: T,
         easer: impl Easer<T> + 'static + Send + Sync,
         formatter: fn(T) -> (String, String),
     ) -> Parameter<T> {
+        let default = easer.inv_ease(default);
         Parameter {
             name,
             value: default.into(),
@@ -465,7 +466,7 @@ impl<T> Parameter<T> {
 }
 
 impl Parameter<Seconds> {
-    fn time(name: &'static str, default: f32, min: f32, max: f32) -> Parameter<Seconds> {
+    fn time(name: &'static str, default: Seconds, min: f32, max: f32) -> Parameter<Seconds> {
         fn time_formatter(value: Seconds) -> (String, String) {
             let value = value.get();
             if value < 1.0 {
@@ -483,7 +484,7 @@ impl Parameter<Seconds> {
 }
 
 impl Parameter<Decibel> {
-    fn decibel(name: &'static str, default: f32, easer: Easing<Decibel>) -> Parameter<Decibel> {
+    fn decibel(name: &'static str, default: Decibel, easer: Easing<Decibel>) -> Parameter<Decibel> {
         fn decibel_formatter(decibel: Decibel) -> (String, String) {
             if decibel.get_db() <= Decibel::NEG_INF_DB_THRESHOLD {
                 ("-inf".to_string(), "dB".to_string())
@@ -508,7 +509,7 @@ impl Parameter<f32> {
 }
 
 impl Parameter<Hertz> {
-    pub fn freq(name: &'static str, default: f32, easer: Easing<Hertz>) -> Parameter<Hertz> {
+    pub fn freq(name: &'static str, default: Hertz, easer: Easing<Hertz>) -> Parameter<Hertz> {
         fn formatter(hz: Hertz) -> (String, String) {
             let hz = hz.get();
             if hz < 1000.0 {

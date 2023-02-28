@@ -104,7 +104,7 @@ impl From<f32> for Seconds {
 
 /// A struct representing Hertz.
 #[derive(Debug, Clone, Copy, PartialEq, Add, Sub, From, Into)]
-pub struct Hertz(f32);
+pub struct Hertz(pub f32);
 
 impl Hertz {
     pub fn new(hz: f32) -> Hertz {
