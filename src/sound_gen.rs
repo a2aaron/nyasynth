@@ -7,7 +7,7 @@ use crate::{
 
 use biquad::{Biquad, DirectForm1, ToHertz, Q_BUTTERWORTH_F32};
 use variant_count::VariantCount;
-use wmidi::{PitchBend, U14, U7};
+use wmidi::{PitchBend, U14};
 
 const TAU: f32 = std::f32::consts::TAU;
 
@@ -86,25 +86,16 @@ pub struct SoundGenerator {
     // If Some(frame_delta, vel), then a note on event occurs in the next frame
     // at sample `frame_delta` samples into the the frame, and the note has a
     // note velocity of `vel`
-    next_note_on: Option<(FrameDelta, Vel)>,
+    next_note_on: Option<(FrameDelta, NoteOnEvent)>,
     // If Some(frame_delta), then the next note off event occurs in the next frame
     // at `frame_delta` samples into the frame
     next_note_off: Option<FrameDelta>,
 }
 
 impl SoundGenerator {
-    pub fn new(
-        note: wmidi::Note,
-        vel: Vel,
-        sample_rate: SampleRate,
-        bend_from: Option<wmidi::Note>,
-    ) -> SoundGenerator {
-        let end_pitch = note.to_freq_f32().into();
-        let start_pitch = if let Some(note) = bend_from {
-            note.to_freq_f32().into()
-        } else {
-            end_pitch
-        };
+    pub fn new(note: wmidi::Note, vel: Vel, sample_rate: SampleRate) -> SoundGenerator {
+        let end_pitch = Hertz::from(note);
+        let start_pitch = end_pitch;
         SoundGenerator {
             note,
             start_pitch,
@@ -153,7 +144,7 @@ impl SoundGenerator {
         // transitions to the retrigger state, with volume `vol`.
         // Also, we set the note velocity to the appropriate new note velocity.
         match self.next_note_on {
-            Some((note_on, note_on_vel)) if note_on == i => {
+            Some((note_on, event)) if note_on == i => {
                 let edge = match self.note_state {
                     NoteState::None => NoteStateEdge::InitialTrigger,
                     _ => NoteStateEdge::NoteRetriggered,
@@ -166,7 +157,10 @@ impl SoundGenerator {
                     NoteState::None => NoteState::Held,
                     _ => NoteState::Retrigger(self.samples_since_note_on),
                 };
-                self.vel = note_on_vel;
+                self.vel = event.vel;
+                self.note = event.note;
+                self.start_pitch = event.start_pitch;
+                self.end_pitch = event.end_pitch();
                 self.next_note_on = None;
             }
             _ => (),
@@ -204,8 +198,10 @@ impl SoundGenerator {
         (osc_1, osc_1)
     }
 
-    pub fn note_on(&mut self, frame_delta: i32, vel: Vel) {
-        self.next_note_on = Some((frame_delta as usize, vel));
+    pub fn note_on(&mut self, frame_delta: i32, vel: Vel, bend_note: Option<wmidi::Note>) {
+        let start_pitch = bend_note.map(Hertz::from);
+        let note_on = NoteOnEvent::new(self.note, vel, start_pitch);
+        self.next_note_on = Some((frame_delta as usize, note_on));
     }
 
     pub fn note_off(&mut self, frame_delta: i32) {
@@ -230,17 +226,17 @@ impl SoundGenerator {
         new_vel: Vel,
         frame_delta: i32,
     ) {
-        let end_pitch = new_note.to_freq_f32().into();
-        if bend_from_current {
-            self.start_pitch = self.get_current_pitch(sample_rate, portamento_time);
+        log::info!("Retrigger {} {}", bend_from_current, new_note);
+        let start_pitch = if bend_from_current {
+            Some(self.get_current_pitch(sample_rate, portamento_time))
         } else {
-            self.start_pitch = end_pitch;
-        }
-        self.note = new_note;
-        self.end_pitch = end_pitch;
+            None
+        };
         self.osc_1.filter_env.remember();
         self.osc_1.vol_env.remember();
-        self.next_note_on = Some((frame_delta as usize, new_vel));
+
+        let note_on = NoteOnEvent::new(new_note, new_vel, start_pitch);
+        self.next_note_on = Some((frame_delta as usize, note_on));
         self.next_note_off = None;
     }
 
@@ -471,6 +467,29 @@ struct NoteContext {
     note_state: NoteState,
     /// The sample rate, in Hz/sec.
     sample_rate: SampleRate,
+}
+
+/// Convience struct for the next_note_on flag.
+#[derive(Debug, Clone, Copy)]
+struct NoteOnEvent {
+    vel: Vel,
+    note: wmidi::Note,
+    start_pitch: Hertz,
+}
+
+impl NoteOnEvent {
+    fn new(note: wmidi::Note, vel: Vel, start_pitch: Option<Hertz>) -> NoteOnEvent {
+        let start_pitch = start_pitch.unwrap_or(Hertz::from(note));
+        NoteOnEvent {
+            vel,
+            note,
+            start_pitch,
+        }
+    }
+
+    fn end_pitch(&self) -> Hertz {
+        self.note.into()
+    }
 }
 
 #[derive(Debug)]

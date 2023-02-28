@@ -231,12 +231,11 @@ impl Plugin for Nyasynth {
                             MidiMessage::NoteOn(_, note, vel) => {
                                 let vel = Vel::from(vel);
                                 let polycat = self.params.polycat();
+                                let bend_note = self.key_tracker.note_on(note, vel, polycat);
                                 if polycat {
                                     // In polycat mode, we simply add the new note.
-                                    let bend_note = self.key_tracker.note_on(note, vel, polycat);
-                                    let mut gen =
-                                        SoundGenerator::new(note, vel, self.sample_rate, bend_note);
-                                    gen.note_on(event.delta_frames, vel);
+                                    let mut gen = SoundGenerator::new(note, vel, self.sample_rate);
+                                    gen.note_on(event.delta_frames, vel, bend_note);
                                     self.notes.push(gen);
                                 } else {
                                     // Monocat mode.
@@ -247,8 +246,8 @@ impl Plugin for Nyasynth {
                                     // If there are no generators playing, start a new note
                                     if self.notes.len() == 0 {
                                         let mut gen =
-                                            SoundGenerator::new(note, vel, self.sample_rate, None);
-                                        gen.note_on(event.delta_frames, vel);
+                                            SoundGenerator::new(note, vel, self.sample_rate);
+                                        gen.note_on(event.delta_frames, vel, None);
                                         self.notes.push(gen);
                                     } else {
                                         // If there is a generator playing, retrigger it. If the generator is release state
@@ -267,6 +266,8 @@ impl Plugin for Nyasynth {
                             }
                             MidiMessage::NoteOff(_, note, _) => {
                                 let polycat = self.params.polycat();
+                                let top_of_stack = self.key_tracker.note_off(note);
+
                                 if polycat {
                                     // On note off, send note off to all sound generators matching the note
                                     // This is done only to notes which are not yet released
@@ -277,9 +278,7 @@ impl Plugin for Nyasynth {
                                     {
                                         gen.note_off(event.delta_frames);
                                     }
-                                    self.key_tracker.note_off(note);
                                 } else {
-                                    let top_of_stack = self.key_tracker.note_off(note);
                                     // Monocat mode.
                                     if self.notes.len() > 1 {
                                         log::warn!("More than one note playing in monocat mode? (noteoff) {:?}", self.notes);
@@ -290,9 +289,15 @@ impl Plugin for Nyasynth {
                                         self.notes
                                             .iter_mut()
                                             .for_each(|x| x.note_off(event.delta_frames));
+                                        log::info!("Note off");
                                     } else {
                                         // If there is a sound playing and the key tracker has a new top-of-stack note,
                                         // then ask the generator retrigger.
+                                        log::info!(
+                                            "maybe retrigger: {:?} {:?}",
+                                            self.notes.first(),
+                                            top_of_stack
+                                        );
                                         match (self.notes.first_mut(), top_of_stack) {
                                             (None, None) => (),
                                             (None, Some(_)) => (),

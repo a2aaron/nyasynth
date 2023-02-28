@@ -169,6 +169,11 @@ impl Hertz {
         Hertz(self.get().clamp(min, max))
     }
 }
+impl From<wmidi::Note> for Hertz {
+    fn from(value: wmidi::Note) -> Self {
+        Hertz(value.to_freq_f32())
+    }
+}
 
 impl From<biquad::Hertz<f32>> for Hertz {
     fn from(value: biquad::Hertz<f32>) -> Self {
