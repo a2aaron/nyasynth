@@ -42,11 +42,11 @@ pub const DEFAULT_VIBRATO_RATE: f32 = 0.0;
 
 pub const DEFAULT_FILTER_ATTACK: f32 = 0.5;
 pub const DEFAULT_FILTER_DECAY: f32 = 0.5;
-pub const DEFAULT_FILTER_ENVLOPE_MOD: f32 = 1.0;
+pub const DEFAULT_FILTER_ENVLOPE_MOD: f32 = 0.50; // ~700 Hz
 pub const DEFAULT_FILTER_DRY_WET: f32 = 1.0; // 100% filter
-pub const DEFAULT_FILTER_Q: f32 = 0.5;
+pub const DEFAULT_FILTER_Q: f32 = 0.25; // ~2.5
 pub const DEFAULT_FILTER_TYPE: f32 = 0.0; // Low Pass
-pub const DEFAULT_FILTER_CUTOFF_FREQ: f32 = 0.6;
+pub const DEFAULT_FILTER_CUTOFF_FREQ: f32 = 0.35; // ~230 Hz
 
 pub const DEFAULT_CHORUS_MIX: f32 = 0.0;
 pub const DEFAULT_CHORUS_DEPTH: f32 = 0.0;
@@ -79,7 +79,7 @@ pub struct MeowParameters {
     gain: Parameter<Decibel>,
     filter_attack: Parameter<Seconds>,
     filter_decay: Parameter<Seconds>,
-    filter_envlope_mod: Parameter<f32>,
+    filter_envlope_mod: Parameter<Hertz>,
     filter_dry_wet: Parameter<f32>,
     filter_q: Parameter<f32>,
     filter_type: Parameter<FilterType>,
@@ -123,15 +123,6 @@ impl MeowParameters {
             (format!("{}", value.0), "semis".to_string())
         }
 
-        fn freq_formatter(hz: Hertz) -> (String, String) {
-            let hz = hz.get();
-            if hz < 1000.0 {
-                (format!("{:.2}", hz), "Hz".to_string())
-            } else {
-                (format!("{:.2}", hz / 1000.0), "kHz".to_string())
-            }
-        }
-
         fn polycat_formatter(value: f32) -> (String, String) {
             if value < 0.5 {
                 ("Off".to_string(), "".to_string())
@@ -142,6 +133,10 @@ impl MeowParameters {
 
         fn angle_formatter(value: f32) -> (String, String) {
             (format!("{}", value * 360.0), "deg".to_string())
+        }
+
+        fn unitless_formatter(value: f32) -> (String, String) {
+            (format!("{:.3}", value), "".to_string())
         }
 
         let meow_sustain = Decibel::ease_db(-24.0, 0.0);
@@ -161,15 +156,13 @@ impl MeowParameters {
         let filter_type = DiscreteLinear {
             values: FILTER_TYPES,
         };
-        let filter_cutoff_freq = Easing::Exponential {
-            start: Hertz::new(20.0),
-            end: Hertz::new(22100.0),
+        let filter_envelope_mod = Hertz::ease_exp(0.0, 22100.0);
+        let filter_cutoff_freq = Hertz::ease_exp(20.0, 22100.0);
+        let filter_q = Easing::Linear {
+            start: 0.01,
+            end: 10.0,
         };
-
-        let chorus_rate = Easing::Exponential {
-            start: Hertz::new(0.1),
-            end: Hertz::new(10.0),
-        };
+        let chorus_rate = Hertz::ease_exp(0.1, 10.0);
 
         MeowParameters {
             meow_attack: Parameter::time("Meow Attack", DEFAULT_MEOW_ATTACK, 0.001, 10.0),
@@ -198,29 +191,37 @@ impl MeowParameters {
             gain: Parameter::decibel("Master Volume", DEFAULT_MASTER_VOL, gain),
             filter_attack: Parameter::time("Filter Attack", DEFAULT_FILTER_ATTACK, 0.001, 2.0),
             filter_decay: Parameter::time("Filter Decay", DEFAULT_FILTER_DECAY, 0.001, 5.0),
-            filter_envlope_mod: Parameter::percent("Filter EnvMod", DEFAULT_FILTER_ENVLOPE_MOD),
+            filter_envlope_mod: Parameter::freq(
+                "Filter EnvMod",
+                DEFAULT_FILTER_ENVLOPE_MOD,
+                filter_envelope_mod,
+            ),
             filter_dry_wet: Parameter::percent("Filter DryWet", DEFAULT_FILTER_DRY_WET),
-            filter_q: Parameter::unitless("Filter Q", DEFAULT_FILTER_Q),
+            filter_q: Parameter::new("Filter Q", DEFAULT_FILTER_Q, filter_q, unitless_formatter),
             filter_type: Parameter::new(
                 "Filter Type",
                 DEFAULT_FILTER_TYPE,
                 filter_type,
                 filter_type_formatter,
             ),
-            filter_cutoff_freq: Parameter::new(
+            filter_cutoff_freq: Parameter::freq(
                 "Filter Cutoff",
                 DEFAULT_FILTER_CUTOFF_FREQ,
                 filter_cutoff_freq,
-                freq_formatter,
             ),
-            chorus_depth: Parameter::unitless("Chorus Depth", DEFAULT_CHORUS_DEPTH),
-            chorus_distance: Parameter::unitless("Chorus Distance", DEFAULT_CHORUS_DISTANCE),
-            chorus_rate: Parameter::new(
-                "Chorus Rate",
-                DEFAULT_CHORUS_RATE,
-                chorus_rate,
-                freq_formatter,
+            chorus_depth: Parameter::new(
+                "Chorus Depth",
+                DEFAULT_CHORUS_DEPTH,
+                IDENTITY,
+                unitless_formatter,
             ),
+            chorus_distance: Parameter::new(
+                "Chorus Distance",
+                DEFAULT_CHORUS_DISTANCE,
+                IDENTITY,
+                unitless_formatter,
+            ),
+            chorus_rate: Parameter::freq("Chorus Rate", DEFAULT_CHORUS_RATE, chorus_rate),
             phase: Parameter::new("Phase", DEFAULT_PHASE, IDENTITY, angle_formatter),
         }
     }
@@ -277,13 +278,15 @@ impl MeowParameters {
     }
 
     pub fn filter_envelope(&self) -> FilterEnvelopeParams {
-        let attack = self.filter_attack.get();
-        let decay = self.filter_decay.get();
+        let attack = self.meow_attack.get();
+        let decay = self.meow_decay.get();
         let env_mod = self.filter_envlope_mod.get();
+        let release = self.meow_release.get();
         FilterEnvelopeParams {
             attack,
             decay,
             env_mod,
+            release,
         }
     }
 
@@ -500,12 +503,19 @@ impl Parameter<f32> {
         }
         Parameter::new(name, default, IDENTITY, formatter)
     }
+}
 
-    fn unitless(name: &'static str, default: f32) -> Parameter<f32> {
-        fn formatter(value: f32) -> (String, String) {
-            (format!("{:.3}", value), "".to_string())
+impl Parameter<Hertz> {
+    pub fn freq(name: &'static str, default: f32, easer: Easing<Hertz>) -> Parameter<Hertz> {
+        fn formatter(hz: Hertz) -> (String, String) {
+            let hz = hz.get();
+            if hz < 1000.0 {
+                (format!("{:.2}", hz), "Hz".to_string())
+            } else {
+                (format!("{:.2}", hz / 1000.0), "kHz".to_string())
+            }
         }
-        Parameter::new(name, default, IDENTITY, formatter)
+        Parameter::new(name, default, easer, formatter)
     }
 }
 
@@ -574,7 +584,8 @@ impl EnvelopeParams<Decibel> for VolumeEnvelopeParams {
 pub struct FilterEnvelopeParams {
     attack: Seconds,
     decay: Seconds,
-    pub env_mod: f32,
+    release: Seconds,
+    pub env_mod: Hertz,
 }
 
 impl EnvelopeParams<f32> for FilterEnvelopeParams {
@@ -595,7 +606,7 @@ impl EnvelopeParams<f32> for FilterEnvelopeParams {
     }
 
     fn release(&self) -> Seconds {
-        Seconds::ZERO
+        self.release
     }
 }
 

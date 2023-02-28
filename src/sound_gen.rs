@@ -1,5 +1,5 @@
 use crate::{
-    common::{Decibel, SampleRate, SampleTime},
+    common::{self, Decibel, SampleRate, SampleTime},
     ease::lerp,
     neighbor_pairs::NeighborPairsIter,
     params::{EnvelopeParams, MeowParameters},
@@ -302,9 +302,12 @@ impl OSCGroup {
             let filter = params.filter();
             // TODO: investigate if this is correct
             let filter_env = self.filter_env.get(&params.filter_envelope(), context);
-            let filter_env = (filter_env + base_vel) * params.filter_envelope().env_mod;
+            let cutoff_freq = common::Hertz::lerp_octave(
+                filter.cutoff_freq,
+                filter.cutoff_freq + params.filter_envelope().env_mod,
+                filter_env,
+            );
 
-            let cutoff_freq = (filter.cutoff_freq * filter_env).get();
             // avoid numerical instability encountered at very low
             // or high frequencies. Clamping at around 20 Hz also
             // avoids blowing out the speakers.
@@ -313,7 +316,7 @@ impl OSCGroup {
             let coefficents = biquad::Coefficients::<f32>::from_params(
                 filter.filter_type,
                 sample_rate.hz(),
-                cutoff_freq.hz(),
+                cutoff_freq.into(),
                 filter.q_value.max(0.0),
             )
             .unwrap();
@@ -339,6 +342,7 @@ impl OSCGroup {
         match edge {
             NoteStateEdge::NoteReleased | NoteStateEdge::NoteRetriggered => {
                 self.vol_env.remember();
+                self.filter_env.remember();
             }
             _ => {}
         }

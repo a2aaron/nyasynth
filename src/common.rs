@@ -103,7 +103,7 @@ impl From<f32> for Seconds {
 }
 
 /// A struct representing Hertz.
-#[derive(Debug, Clone, Copy, PartialEq, Add, Sub)]
+#[derive(Debug, Clone, Copy, PartialEq, Add, Sub, From, Into)]
 pub struct Hertz(f32);
 
 impl Hertz {
@@ -113,6 +113,26 @@ impl Hertz {
 
     pub fn get(&self) -> f32 {
         self.0
+    }
+
+    // Lerp linearly in octave-space
+    pub fn lerp_octave(start: Hertz, end: Hertz, t: f32) -> Hertz {
+        let start = start.get().log2();
+        let end = end.get().log2();
+        let interpolated = lerp(start, end, t);
+        let hz = interpolated.exp2();
+        Hertz::new(hz)
+    }
+
+    pub fn ease_exp(start: f32, end: f32) -> Easing<Hertz> {
+        Easing::Exponential {
+            start: start.into(),
+            end: end.into(),
+        }
+    }
+
+    pub fn clamp(&self, min: f32, max: f32) -> Hertz {
+        Hertz(self.get().clamp(min, max))
     }
 }
 
