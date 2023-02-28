@@ -33,7 +33,7 @@ use sound_gen::{
 };
 
 static PROJECT_DIRS: Lazy<Option<directories::ProjectDirs>> =
-    Lazy::new(|| directories::ProjectDirs::from("", "", "Revisit VST"));
+    Lazy::new(|| directories::ProjectDirs::from("", "", "Nyasynth VST"));
 
 pub static LOG_DIR: Lazy<PathBuf> = Lazy::new(|| {
     let mut log_dir = match PROJECT_DIRS.as_ref() {
@@ -49,7 +49,7 @@ pub static LOG_DIR: Lazy<PathBuf> = Lazy::new(|| {
             );
         }
     }
-    log_dir.push("revisit.log");
+    log_dir.push("nyasynth.log");
     log_dir
 });
 
@@ -70,12 +70,12 @@ pub static DATA_DIR: Lazy<PathBuf> = Lazy::new(|| {
     data_dir
 });
 
-static FALLBACK_DATA_DIR: Lazy<&'static Path> = Lazy::new(|| Path::new("./revisit_VST/data/"));
+static FALLBACK_DATA_DIR: Lazy<&'static Path> = Lazy::new(|| Path::new("./nyasynth_VST/data/"));
 
-static FALLBACK_LOG_DIR: Lazy<&'static Path> = Lazy::new(|| Path::new("./revisit_VST/log"));
+static FALLBACK_LOG_DIR: Lazy<&'static Path> = Lazy::new(|| Path::new("./nyasynth_VST/log"));
 
 /// The main plugin struct.
-struct Revisit {
+struct Nyasynth {
     /// All the notes to be played.
     notes: Vec<SoundGenerator>,
     /// The sample rate in Hz/sec (usually 44,100)
@@ -94,9 +94,9 @@ struct Revisit {
     host: HostCallback,
 }
 
-impl Plugin for Revisit {
+impl Plugin for Nyasynth {
     fn new(host: HostCallback) -> Self {
-        Revisit {
+        Nyasynth {
             params: Arc::new(MeowParameters::new()),
             notes: Vec::with_capacity(16),
             sample_rate: SampleRate::from(44100.0),
@@ -110,7 +110,7 @@ impl Plugin for Revisit {
     fn init(&mut self) {
         let result = simple_logging::log_to_file(&*LOG_DIR, log::LevelFilter::Info);
         // let result = simple_logging::log_to_file(
-        //     "D:\\dev\\Rust\\revist\\revisit.log",
+        //     "D:\\dev\\Rust\\nyasynth\\nyasynth.log",
         //     log::LevelFilter::Info,
         // );
 
@@ -134,11 +134,11 @@ impl Plugin for Revisit {
 
     fn get_info(&self) -> Info {
         Info {
-            name: "Revisit".to_string(),
+            name: "Nyasynth".to_string(),
             vendor: "a2aaron".to_string(),
             // Used by hosts to differentiate between plugins.
             // Don't worry much about this now - just fill in a random number.
-            unique_id: 413612,
+            unique_id: i32::from_be_bytes([13, 5, 15, 23]), // "MEOW"
             version: 1,
             category: Category::Synth,
             parameters: MeowParameters::NUM_PARAMS as i32,
@@ -313,4 +313,4 @@ impl Plugin for Revisit {
 }
 
 // Export symbols for main
-plugin_main!(Revisit);
+plugin_main!(Nyasynth);
