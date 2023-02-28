@@ -31,7 +31,7 @@ const VIBRATO_RATES: [VibratoRate; 8] = [
 pub const DEFAULT_MASTER_VOL: f32 = 0.6875; // -3 dB
 
 // Default values for volume envelope
-pub const DEFAULT_MEOW_ATTACK: f32 = 0.3; // ~75 ms
+pub const DEFAULT_MEOW_ATTACK: f32 = 0.30994564; // ~75 ms
 pub const DEFAULT_MEOW_DECAY: f32 = 0.8; // ~1.25 s
 pub const DEFAULT_MEOW_SUSTAIN: f32 = 0.2;
 pub const DEFAULT_MEOW_RELEASE: f32 = 0.6; // ~400 ms
@@ -42,11 +42,11 @@ pub const DEFAULT_VIBRATO_RATE: f32 = 0.0;
 
 pub const DEFAULT_FILTER_ATTACK: f32 = 0.5;
 pub const DEFAULT_FILTER_DECAY: f32 = 0.5;
-pub const DEFAULT_FILTER_ENVLOPE_MOD: f32 = 0.50; // ~700 Hz
+pub const DEFAULT_FILTER_ENVLOPE_MOD: f32 = 0.8344; // ~7000 Hz
 pub const DEFAULT_FILTER_DRY_WET: f32 = 1.0; // 100% filter
 pub const DEFAULT_FILTER_Q: f32 = 0.25; // ~2.5
 pub const DEFAULT_FILTER_TYPE: f32 = 0.0; // Low Pass
-pub const DEFAULT_FILTER_CUTOFF_FREQ: f32 = 0.35; // ~230 Hz
+pub const DEFAULT_FILTER_CUTOFF_FREQ: f32 = 0.40258616; // ~350 Hz, which will be around 7350 at max meow sustain on max velocity.
 
 pub const DEFAULT_CHORUS_MIX: f32 = 0.0;
 pub const DEFAULT_CHORUS_DEPTH: f32 = 0.0;
@@ -132,7 +132,7 @@ impl MeowParameters {
         }
 
         fn angle_formatter(value: f32) -> (String, String) {
-            (format!("{}", value * 360.0), "deg".to_string())
+            (format!("{:.2}", value * 360.0), "deg".to_string())
         }
 
         fn unitless_formatter(value: f32) -> (String, String) {
@@ -280,10 +280,12 @@ impl MeowParameters {
     pub fn filter_envelope(&self) -> FilterEnvelopeParams {
         let attack = self.meow_attack.get();
         let decay = self.meow_decay.get();
-        let env_mod = self.filter_envlope_mod.get();
+        let sustain = self.meow_sustain.get_raw();
         let release = self.meow_release.get();
+        let env_mod = self.filter_envlope_mod.get();
         FilterEnvelopeParams {
             attack,
+            sustain,
             decay,
             env_mod,
             release,
@@ -583,6 +585,7 @@ impl EnvelopeParams<Decibel> for VolumeEnvelopeParams {
 
 pub struct FilterEnvelopeParams {
     attack: Seconds,
+    sustain: f32,
     decay: Seconds,
     release: Seconds,
     pub env_mod: Hertz,
@@ -602,7 +605,7 @@ impl EnvelopeParams<f32> for FilterEnvelopeParams {
     }
 
     fn sustain(&self) -> f32 {
-        0.0
+        self.sustain
     }
 
     fn release(&self) -> Seconds {

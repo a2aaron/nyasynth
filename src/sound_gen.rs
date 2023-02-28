@@ -1,6 +1,6 @@
 use crate::{
     common::{self, Decibel, Hertz, SampleRate, SampleTime},
-    ease::lerp,
+    ease::{ease_in_expo, lerp},
     neighbor_pairs::NeighborPairsIter,
     params::{EnvelopeParams, MeowParameters},
 };
@@ -235,7 +235,7 @@ impl OSCGroup {
     /// Get the next sample from the osc group, applying modulation parameters
     /// as well.
     /// base_vel - The velocity of the note. This is affected by volume
-    ///            modulation.
+    ///            modulation. This is a 0.0-1.0 normalized value.
     /// base_note - The base pitch, in Hz, of the note
     /// pitch_bend - A [-1.0, 1.0] range value
     /// (mod_type, modulation) - Indicates what modulation type, if any, to
@@ -302,9 +302,15 @@ impl OSCGroup {
             let filter = params.filter();
             // TODO: investigate if this is correct
             let filter_env = self.filter_env.get(&params.filter_envelope(), context);
+
+            // Easing sort of experimentally determined. See the following:
+            // https://www.desmos.com/calculator/grjkm7iknd
+            // https://docs.google.com/spreadsheets/d/174y4e5t8698O4-Wh9idkMVeZFb-L-7l8zLmDMGz-D-A/edit?usp=sharing
+            let base_vel_eased = ease_in_expo(base_vel);
+
             let cutoff_freq = common::Hertz::lerp_octave(
                 filter.cutoff_freq,
-                filter.cutoff_freq + params.filter_envelope().env_mod,
+                filter.cutoff_freq + params.filter_envelope().env_mod * base_vel_eased,
                 filter_env,
             );
 

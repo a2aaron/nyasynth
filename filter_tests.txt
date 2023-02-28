@@ -1,0 +1,13 @@
+velocity sweep is from 0 to 200 (LMMS units), stepping by 20 each note
+
+cutoff: 0.43 (default)
+
+env mod: 0.0
+MEOW: 0.0 sustain
+Decay: 1.0 (default)
+Attack: 0.48 (default)
+
+peak is around 280hz - 300hz across all velocities
+
+
+at max velocity, total freq sweep is ~350hz - 8khz over the MEOW env. at zero velocity, total freq sweep is ~350hz constant
