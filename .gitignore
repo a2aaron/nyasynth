@@ -3,3 +3,6 @@
 /iced_baseview
 /biquad-rs
 *.log
+*.vst
+*.wav
+*.mp3
