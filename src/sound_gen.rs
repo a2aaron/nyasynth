@@ -128,7 +128,7 @@ impl SoundGenerator {
         i: FrameDelta,
         sample_rate: SampleRate,
         pitch_bend: f32,
-        tempo: f32,
+        vibrato_mod: f32,
     ) -> (f32, f32) {
         // Only advance time if the note is being held down.
         match self.note_state {
@@ -209,7 +209,7 @@ impl SoundGenerator {
             self.vel,
             self.get_current_pitch(sample_rate, params.portamento_time()),
             pitch_bend,
-            tempo,
+            vibrato_mod,
         );
 
         (osc_1, osc_1)
@@ -287,7 +287,6 @@ struct OSCGroup {
     osc: Oscillator,
     vol_env: Envelope<Decibel>,
     vibrato_env: Envelope<f32>,
-    vibrato_lfo: Oscillator,
     // The state for the EQ/filters, applied after the signal is generated
     filter: DirectForm1<f32>,
     filter_env: Envelope<f32>,
@@ -299,7 +298,6 @@ impl OSCGroup {
             osc: Oscillator::new(),
             vol_env: Envelope::<Decibel>::new(),
             vibrato_env: Envelope::<f32>::new(),
-            vibrato_lfo: Oscillator::new(),
             filter_env: Envelope::<f32>::new(),
             filter: DirectForm1::<f32>::new(
                 biquad::Coefficients::<f32>::from_params(
@@ -331,7 +329,7 @@ impl OSCGroup {
         base_vel: Vel,
         base_note: Hertz,
         pitch_bend: f32,
-        tempo: f32,
+        vibrato_mod: f32,
     ) -> f32 {
         let sample_rate = context.sample_rate;
 
@@ -345,17 +343,10 @@ impl OSCGroup {
         // the signal allows for more interesting audio.
         let total_volume = base_vel.0 * (params.master_vol() + vol_env).get_amp().max(0.0);
 
-        let vibrato_params = params.vibrato_lfo(tempo);
-        let vibrato_env = self.vibrato_env.get(&vibrato_params, context) * vibrato_params.amount;
-        // Compute note pitch multiplier
-        let vibrato_lfo = self.vibrato_lfo.next_sample(
-            sample_rate,
-            NoteShape::Sine,
-            vibrato_params.speed.into(),
-            1.0,
-        ) * vibrato_env;
-        let pitch_bend = to_pitch_multiplier(pitch_bend, params.pitchbend_max() as i32);
-        let pitch_mods = to_pitch_multiplier(vibrato_lfo, 2);
+        let pitch_bend = to_pitch_multiplier(pitch_bend, params.pitchbend_max() as f32);
+
+        let vibrato_env = self.vibrato_env.get(&params.vibrato_attack(), context);
+        let pitch_mods = to_pitch_multiplier(vibrato_mod, vibrato_env * 2.0);
 
         // The final pitch multiplier, post-FM
         // Base note is the base note frequency, in hz
@@ -437,12 +428,12 @@ impl OSCGroup {
 }
 
 #[derive(Debug)]
-struct Oscillator {
+pub struct Oscillator {
     angle: Angle,
 }
 
 impl Oscillator {
-    fn new() -> Oscillator {
+    pub fn new() -> Oscillator {
         Oscillator { angle: 0.0 }
     }
 
@@ -455,7 +446,7 @@ impl Oscillator {
     /// phase_mod - how much to add to the current angle value to produce a
     ///             a phase offset. Units are 0.0-1.0 normalized angles (so
     ///             0.0 is zero radians, 1.0 is 2pi radians.)
-    fn next_sample(
+    pub fn next_sample(
         &mut self,
         sample_rate: SampleRate,
         shape: NoteShape,
@@ -786,10 +777,10 @@ pub fn normalize_pitch_bend(pitch_bend: PitchBend) -> NormalizedPitchbend {
 /// Convert a NormalizedPitchbend into a pitch multiplier. The multiplier is such
 /// that a `pitch_bend` of +1.0 will bend up by `semitones` semitones and a value
 /// of -1.0 will bend down by `semitones` semitones.
-pub fn to_pitch_multiplier(pitch_bend: NormalizedPitchbend, semitones: i32) -> f32 {
+pub fn to_pitch_multiplier(pitch_bend: NormalizedPitchbend, semitones: f32) -> f32 {
     // Given any note, the note a single semitone away is 2^1/12 times the original note
     // So (2^1/12)^n is n semitones away
-    let exponent = 2.0f32.powf(semitones as f32 / 12.0);
+    let exponent = 2.0f32.powf(semitones / 12.0);
     // We take an exponential here because frequency is exponential with respect
     // to note value
     exponent.powf(pitch_bend)

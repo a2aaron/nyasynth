@@ -299,15 +299,15 @@ impl MeowParameters {
         }
     }
 
-    pub fn vibrato_lfo(&self, tempo: f32) -> VibratoParams {
+    pub fn vibrato_attack(&self) -> VibratoEnvelopeParams {
+        let attack = self.vibrato_attack.get();
+        VibratoEnvelopeParams { attack }
+    }
+
+    pub fn vibrato_lfo(&self, tempo: f32) -> VibratoLFOParams {
         let speed = self.vibrato_rate.get().as_hz(tempo);
         let amount = self.vibrato_amount.get();
-        let attack = self.vibrato_attack.get();
-        VibratoParams {
-            speed,
-            amount,
-            attack,
-        }
+        VibratoLFOParams { speed, amount }
     }
 
     fn get(&self, index: i32) -> Option<ParameterView> {
@@ -614,13 +614,16 @@ pub struct FilterParams {
 }
 
 #[derive(Debug)]
-pub struct VibratoParams {
+pub struct VibratoLFOParams {
     pub speed: Hertz,
     pub amount: f32,
-    pub attack: Seconds,
 }
 
-impl EnvelopeParams<f32> for VibratoParams {
+pub struct VibratoEnvelopeParams {
+    attack: Seconds,
+}
+
+impl EnvelopeParams<f32> for VibratoEnvelopeParams {
     fn attack(&self) -> Seconds {
         self.attack
     }

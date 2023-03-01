@@ -31,7 +31,8 @@ use vst::{
 use wmidi::MidiMessage;
 
 use sound_gen::{
-    normalize_pitch_bend, to_pitch_envelope, NormalizedPitchbend, SoundGenerator, RETRIGGER_TIME,
+    normalize_pitch_bend, to_pitch_envelope, NormalizedPitchbend, NoteShape, Oscillator,
+    SoundGenerator, RETRIGGER_TIME,
 };
 
 static PROJECT_DIRS: Lazy<Option<directories::ProjectDirs>> =
@@ -93,6 +94,9 @@ struct Nyasynth {
     /// The tempo, in beats per minute
     tempo: f64,
     key_tracker: KeyTracker,
+    // The vibrato LFO is global--the vibrato amount is shared across all generators, although each
+    // generator gets it's own vibrato envelope.
+    vibrato_lfo: Oscillator,
     /// The host callback
     host: HostCallback,
 }
@@ -107,6 +111,7 @@ impl Plugin for Nyasynth {
             key_tracker: KeyTracker::new(),
             last_pitch_bend: 0.0,
             tempo: 120.0,
+            vibrato_lfo: Oscillator::new(),
             host,
         }
     }
@@ -183,14 +188,25 @@ impl Plugin for Nyasynth {
         let mut left_out = vec![0.0; num_samples];
         let mut right_out = vec![0.0; num_samples];
 
+        let vibrato_params = self.params.vibrato_lfo(self.tempo as f32);
+
         for gen in &mut self.notes {
             for i in 0..num_samples {
+                // Get the vibrato modifier, which is global across all of the generators. (Note that each
+                // generator gets it's own vibrato envelope).
+                let vibrato_mod = self.vibrato_lfo.next_sample(
+                    self.sample_rate,
+                    NoteShape::Sine,
+                    vibrato_params.speed,
+                    1.0,
+                ) * vibrato_params.amount;
+
                 let (left, right) = gen.next_sample(
                     &self.params,
                     i,
                     self.sample_rate,
                     pitch_bends[i],
-                    self.tempo as f32,
+                    vibrato_mod,
                 );
                 left_out[i] += left;
                 right_out[i] += right;
