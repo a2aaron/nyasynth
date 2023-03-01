@@ -40,8 +40,6 @@ const DEFAULT_VIBRATO_AMOUNT: f32 = 0.0;
 const DEFAULT_VIBRATO_ATTACK: Seconds = Seconds::new(0.0);
 const DEFAULT_VIBRATO_RATE: VibratoRate = VibratoRate::Eighth;
 
-const DEFAULT_FILTER_ATTACK: Seconds = Seconds::new(0.0);
-const DEFAULT_FILTER_DECAY: Seconds = Seconds::new(0.0);
 const DEFAULT_FILTER_ENVLOPE_MOD: Hertz = Hertz(7000.0);
 const DEFAULT_FILTER_DRY_WET: f32 = 1.0; // 100% filter
 const DEFAULT_FILTER_Q: f32 = 2.5;
@@ -77,8 +75,6 @@ pub struct MeowParameters {
     polycat: Parameter<f32>,
     // Internal parametert not be exposed)
     gain: Parameter<Decibel>,
-    filter_attack: Parameter<Seconds>,
-    filter_decay: Parameter<Seconds>,
     filter_envlope_mod: Parameter<Hertz>,
     filter_dry_wet: Parameter<f32>,
     filter_q: Parameter<f32>,
@@ -91,7 +87,7 @@ pub struct MeowParameters {
 }
 
 impl MeowParameters {
-    pub const NUM_PARAMS: usize = 24;
+    pub const NUM_PARAMS: usize = 22;
 
     pub fn new() -> MeowParameters {
         fn filter_type_formatter(value: FilterType) -> (String, String) {
@@ -189,8 +185,6 @@ impl MeowParameters {
             polycat: Parameter::new("Polycat", DEFAULT_POLYCAT, polycat, polycat_formatter),
             // Internal parameters (might not be exposed)
             gain: Parameter::decibel("Master Volume", DEFAULT_MASTER_VOL, gain),
-            filter_attack: Parameter::time("Filter Attack", DEFAULT_FILTER_ATTACK, 0.001, 2.0),
-            filter_decay: Parameter::time("Filter Decay", DEFAULT_FILTER_DECAY, 0.001, 5.0),
             filter_envlope_mod: Parameter::freq(
                 "Filter EnvMod",
                 DEFAULT_FILTER_ENVLOPE_MOD,
@@ -330,18 +324,16 @@ impl MeowParameters {
             9 => self.chorus_mix.view(),
             10 => self.pitch_bend.view(),
             11 => self.polycat.view(),
-            12 => self.filter_attack.view(),
-            13 => self.filter_decay.view(),
-            14 => self.filter_envlope_mod.view(),
-            15 => self.filter_dry_wet.view(),
-            16 => self.filter_q.view(),
-            17 => self.filter_type.view(),
-            18 => self.filter_cutoff_freq.view(),
-            19 => self.chorus_depth.view(),
-            20 => self.chorus_distance.view(),
-            21 => self.chorus_rate.view(),
-            22 => self.phase.view(),
-            23 => self.gain.view(),
+            12 => self.filter_envlope_mod.view(),
+            13 => self.filter_dry_wet.view(),
+            14 => self.filter_q.view(),
+            15 => self.filter_type.view(),
+            16 => self.filter_cutoff_freq.view(),
+            17 => self.chorus_depth.view(),
+            18 => self.chorus_distance.view(),
+            19 => self.chorus_rate.view(),
+            20 => self.phase.view(),
+            21 => self.gain.view(),
             _ => return None,
         };
         Some(view)
