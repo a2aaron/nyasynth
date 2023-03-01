@@ -130,8 +130,6 @@ impl SoundGenerator {
         pitch_bend: f32,
         tempo: f32,
     ) -> (f32, f32) {
-        let context = self.get_note_context(sample_rate);
-
         // Only advance time if the note is being held down.
         match self.note_state {
             NoteState::None => (),
@@ -186,9 +184,13 @@ impl SoundGenerator {
             }
         }
 
+        // Note: Note context will have changed from above state transitions, so we must get a fresh copy.
+        // Failing to do so means that we persist in the release state for one sample too long (which
+        // cause envelope discontiunities due to the fact that `note_state_changed` calls `remember`, which
+        // in turn results in the `ease_from` values for envelopes changing.)
         let osc_1 = self.osc_1.next_sample(
             &params,
-            context,
+            self.get_note_context(sample_rate),
             self.vel,
             self.get_current_pitch(sample_rate, params.portamento_time()),
             pitch_bend,
@@ -226,14 +228,11 @@ impl SoundGenerator {
         new_vel: Vel,
         frame_delta: i32,
     ) {
-        log::info!("Retrigger {} {}", bend_from_current, new_note);
         let start_pitch = if bend_from_current {
             Some(self.get_current_pitch(sample_rate, portamento_time))
         } else {
             None
         };
-        self.osc_1.filter_env.remember();
-        self.osc_1.vol_env.remember();
 
         let note_on = NoteOnEvent::new(new_note, new_vel, start_pitch);
         self.next_note_on = Some((frame_delta as usize, note_on));
