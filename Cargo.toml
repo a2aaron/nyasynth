@@ -18,21 +18,6 @@ backtrace = "0.3"
 biquad = "0.4.0"
 ordered-float = "3.4.0"
 
-# for GUI
-iced = { version = "0.3" }
-iced_audio = "0.7" # { git = "https://github.com/a2aaron/iced_audio", branch = "main" }
-iced_baseview = { git = "https://github.com/BillyDM/iced_baseview", rev = "331fe2dc14316f645e8bd43ff0295ee1957732ae" }
-iced_native = "0.4.0"
-iced_futures = { version = "0.3.0", features = ["async-std"] }
-iced_graphics = { version = "0.2.0", features = ["canvas"] }
-raw-window-handle = "0.3.3"
-# rev matches iced_baseview revision
-baseview = { git = "https://github.com/RustAudio/baseview", rev = "d399c1275522ae75f5a82caadd904df2685c8660" }
-# because baseview doesn't reexport this
-keyboard-types = "0.5.0"
-# for use with iced's subscriptions
-tokio = { version = "1.0.0", features = ["sync"] }
-
 # for preset stuff
 directories = "4.0.1"
 once_cell = "1.7.2"
