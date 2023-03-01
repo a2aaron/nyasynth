@@ -3,6 +3,7 @@
 #[macro_use]
 extern crate vst;
 
+mod chorus;
 mod common;
 mod ease;
 mod keys;
@@ -17,7 +18,9 @@ use std::{
 };
 
 use backtrace::Backtrace;
+use chorus::Chorus;
 use common::{SampleRate, Vel};
+use ease::lerp;
 use keys::KeyTracker;
 use once_cell::sync::Lazy;
 use params::MeowParameters;
@@ -97,21 +100,25 @@ struct Nyasynth {
     // The vibrato LFO is global--the vibrato amount is shared across all generators, although each
     // generator gets it's own vibrato envelope.
     vibrato_lfo: Oscillator,
+    // The chorus effect is also global.
+    chorus: Chorus,
     /// The host callback
     host: HostCallback,
 }
 
 impl Plugin for Nyasynth {
     fn new(host: HostCallback) -> Self {
+        let sample_rate = SampleRate::from(44100.0);
         Nyasynth {
             params: Arc::new(MeowParameters::new()),
             notes: Vec::with_capacity(16),
-            sample_rate: SampleRate::from(44100.0),
+            sample_rate,
             pitch_bend: Vec::with_capacity(16),
             key_tracker: KeyTracker::new(),
             last_pitch_bend: 0.0,
             tempo: 120.0,
             vibrato_lfo: Oscillator::new(),
+            chorus: Chorus::new(sample_rate),
             host,
         }
     }
@@ -189,6 +196,7 @@ impl Plugin for Nyasynth {
         let mut right_out = vec![0.0; num_samples];
 
         let vibrato_params = self.params.vibrato_lfo(self.tempo as f32);
+        let chorus_params = self.params.chorus();
 
         for gen in &mut self.notes {
             for i in 0..num_samples {
@@ -208,6 +216,7 @@ impl Plugin for Nyasynth {
                     pitch_bends[i],
                     vibrato_mod,
                 );
+
                 left_out[i] += left;
                 right_out[i] += right;
             }
@@ -215,8 +224,19 @@ impl Plugin for Nyasynth {
 
         // Write sound
         for i in 0..num_samples {
-            output_buffer[0][i] = left_out[i];
-            output_buffer[1][i] = right_out[i];
+            let left = left_out[i];
+            let right = right_out[i];
+
+            // Get the chorus effect
+            let chorus = self
+                .chorus
+                .next_sample(left, self.sample_rate, &chorus_params);
+
+            let left = lerp(left, chorus, chorus_params.mix);
+            let right = lerp(right, chorus, chorus_params.mix);
+
+            output_buffer[0][i] = left;
+            output_buffer[1][i] = right;
         }
     }
 
@@ -310,15 +330,9 @@ impl Plugin for Nyasynth {
                                         self.notes
                                             .iter_mut()
                                             .for_each(|x| x.note_off(event.delta_frames));
-                                        log::info!("Note off");
                                     } else {
                                         // If there is a sound playing and the key tracker has a new top-of-stack note,
                                         // then ask the generator retrigger.
-                                        log::info!(
-                                            "maybe retrigger: {:?} {:?}",
-                                            self.notes.first(),
-                                            top_of_stack
-                                        );
                                         match (self.notes.first_mut(), top_of_stack) {
                                             (None, None) => (),
                                             (None, Some(_)) => (),
@@ -377,6 +391,7 @@ impl Plugin for Nyasynth {
     fn set_sample_rate(&mut self, rate: f32) {
         if let Some(rate) = SampleRate::new(rate) {
             self.sample_rate = rate;
+            self.chorus.set_sample_rate(rate);
         } else {
             log::error!(
                 "Cannot set sample rate to {} (expected a positive value)",

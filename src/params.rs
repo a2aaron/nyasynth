@@ -47,9 +47,9 @@ const DEFAULT_FILTER_TYPE: FilterType = FilterType::LowPass; // Low Pass
 const DEFAULT_FILTER_CUTOFF_FREQ: Hertz = Hertz(350.0); // this which will be around 7350 at max meow sustain on max velocity.
 
 const DEFAULT_CHORUS_MIX: f32 = 0.0;
-const DEFAULT_CHORUS_DEPTH: f32 = 0.0;
-const DEFAULT_CHORUS_DISTANCE: f32 = 0.0;
-const DEFAULT_CHORUS_RATE: Hertz = Hertz(1.0);
+const DEFAULT_CHORUS_DEPTH: f32 = 44.0;
+const DEFAULT_CHORUS_DISTANCE: f32 = 450.0;
+const DEFAULT_CHORUS_RATE: Hertz = Hertz(0.33);
 
 const DEFAULT_PHASE: f32 = 0.0;
 
@@ -58,6 +58,9 @@ const DEFAULT_NOISE_MIX: f32 = 0.0;
 const DEFAULT_PITCHBEND: I32Divable = I32Divable(12); // +12 semis
 const DEFAULT_PORTAMENTO: Seconds = Seconds::new(120.0 / 1000.0);
 const DEFAULT_POLYCAT: f32 = 0.0; // Off
+
+pub const MAX_CHORUS_DEPTH: f32 = 100.0;
+pub const MAX_CHORUS_DISTANCE: f32 = 1000.0;
 
 pub struct MeowParameters {
     // Public parameters (exposed in UI)
@@ -158,7 +161,16 @@ impl MeowParameters {
             start: 0.01,
             end: 10.0,
         };
+
         let chorus_rate = Hertz::ease_exp(0.1, 10.0);
+        let chorus_depth = Easing::Linear {
+            start: 0.0,
+            end: MAX_CHORUS_DEPTH,
+        };
+        let chorus_distance = Easing::Linear {
+            start: 0.0,
+            end: MAX_CHORUS_DISTANCE,
+        };
 
         MeowParameters {
             meow_attack: Parameter::time("Meow Attack", DEFAULT_MEOW_ATTACK, 0.001, 10.0),
@@ -206,13 +218,13 @@ impl MeowParameters {
             chorus_depth: Parameter::new(
                 "Chorus Depth",
                 DEFAULT_CHORUS_DEPTH,
-                IDENTITY,
+                chorus_depth,
                 unitless_formatter,
             ),
             chorus_distance: Parameter::new(
                 "Chorus Distance",
                 DEFAULT_CHORUS_DISTANCE,
-                IDENTITY,
+                chorus_distance,
                 unitless_formatter,
             ),
             chorus_rate: Parameter::freq("Chorus Rate", DEFAULT_CHORUS_RATE, chorus_rate),
@@ -289,12 +301,14 @@ impl MeowParameters {
     pub fn chorus(&self) -> ChorusParams {
         let rate = self.chorus_rate.get();
         let depth = self.chorus_depth.get();
-        let distance = self.chorus_distance.get();
+        let min_distance = self.chorus_distance.get();
+
         let mix = self.chorus_mix.get();
+
         ChorusParams {
             rate,
             depth,
-            distance,
+            min_distance,
             mix,
         }
     }
@@ -515,10 +529,10 @@ impl Parameter<Hertz> {
 }
 
 pub struct ChorusParams {
-    rate: Hertz,
-    depth: f32,
-    distance: f32,
-    mix: f32,
+    pub rate: Hertz,
+    pub depth: f32,
+    pub min_distance: f32,
+    pub mix: f32,
 }
 
 // A set of immutable envelope parameters. The envelope is defined as follows:
