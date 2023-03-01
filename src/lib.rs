@@ -30,7 +30,9 @@ use vst::{
 };
 use wmidi::MidiMessage;
 
-use sound_gen::{normalize_pitch_bend, to_pitch_envelope, NormalizedPitchbend, SoundGenerator};
+use sound_gen::{
+    normalize_pitch_bend, to_pitch_envelope, NormalizedPitchbend, SoundGenerator, RETRIGGER_TIME,
+};
 
 static PROJECT_DIRS: Lazy<Option<directories::ProjectDirs>> =
     Lazy::new(|| directories::ProjectDirs::from("", "", "Nyasynth VST"));
@@ -148,6 +150,9 @@ impl Plugin for Nyasynth {
             inputs: 0,
             // Two channel audio!
             outputs: 2,
+            // On a retrigger, the next note is delayed by RETRIGGER_TIME. Hence, there is a latency
+            // of RETRIGGER_TIME. Note that this latency doesn't exist for non-retriggered notes.
+            initial_delay: RETRIGGER_TIME as i32,
             // For now, fill in the rest of our fields with `Default` info.
             ..Default::default()
         }

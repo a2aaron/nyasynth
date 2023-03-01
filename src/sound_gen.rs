@@ -12,7 +12,7 @@ use wmidi::{PitchBend, U14};
 const TAU: f32 = std::f32::consts::TAU;
 
 // The time, in samples, for how long retrigger phase is.
-const RETRIGGER_TIME: SampleTime = 88; // 88 samples is about 2 miliseconds.
+pub const RETRIGGER_TIME: SampleTime = 88; // 88 samples is about 2 miliseconds.
 
 /// An offset, in samples, from the start of the frame.
 type FrameDelta = usize;
@@ -113,7 +113,7 @@ impl SoundGenerator {
     /// it is in the release state and it is after the total release time.
     pub fn is_alive(&self, sample_rate: SampleRate, params: &MeowParameters) -> bool {
         match self.note_state {
-            NoteState::None | NoteState::Held | NoteState::Retrigger(_) => true,
+            NoteState::None | NoteState::Held | NoteState::Retrigger { .. } => true,
             NoteState::Released(release_time) => {
                 // The number of seconds it has been since release
                 let time = sample_rate.to_seconds(self.samples_since_note_on - release_time);
@@ -151,14 +151,23 @@ impl SoundGenerator {
                 self.osc_1.note_state_changed(edge);
 
                 // Update the note state
-                self.note_state = match self.note_state {
-                    NoteState::None => NoteState::Held,
-                    _ => NoteState::Retrigger(self.samples_since_note_on),
+                match self.note_state {
+                    NoteState::None => {
+                        self.note_state = NoteState::Held;
+
+                        self.apply_note_on_event(event);
+                    }
+                    _ => {
+                        self.note_state = NoteState::Retrigger {
+                            start_time: self.samples_since_note_on,
+                            event,
+                        };
+
+                        // On a Retrigger, save the NoteOn event to be applied after the Retrigger
+                        // state is finished. If we apply the NoteOn event now, a click will be caused
+                        // due to the note pitch changing suddenly
+                    }
                 };
-                self.vel = event.vel;
-                self.note = event.note;
-                self.start_pitch = event.start_pitch;
-                self.end_pitch = event.end_pitch();
                 self.next_note_on = None;
             }
             _ => (),
@@ -177,8 +186,14 @@ impl SoundGenerator {
 
         // If it has been 10 samples in the retrigger state, switch back to
         // the held state. This also resets the time.
-        if let NoteState::Retrigger(retrigger_time) = self.note_state {
+        if let NoteState::Retrigger {
+            start_time: retrigger_time,
+            event,
+        } = self.note_state
+        {
             if self.samples_since_note_on - retrigger_time > RETRIGGER_TIME {
+                self.apply_note_on_event(event);
+
                 self.note_state = NoteState::Held;
                 self.samples_since_note_on = 0;
             }
@@ -215,7 +230,7 @@ impl SoundGenerator {
             NoteState::Released(_) => true,
             NoteState::None => false,
             NoteState::Held => false,
-            NoteState::Retrigger(_) => false,
+            NoteState::Retrigger { .. } => false,
         }
     }
 
@@ -254,6 +269,16 @@ impl SoundGenerator {
             .to_seconds(context.samples_since_note_on);
         let t = (time / portamento_time).clamp(0.0, 1.0);
         Hertz::lerp_octave(self.start_pitch, self.end_pitch, t)
+    }
+
+    /// Apply the values contained within a NoteOnEvent. This is used to set the velocity and pitch
+    /// values that occur at the start of a note event (that is, this function should be called
+    /// when entering the Held state).
+    fn apply_note_on_event(&mut self, event: NoteOnEvent) {
+        self.note = event.note;
+        self.vel = event.vel;
+        self.start_pitch = event.start_pitch;
+        self.end_pitch = event.end_pitch();
     }
 }
 
@@ -548,9 +573,12 @@ impl<T: EnvelopeType> Envelope<T> {
                     T::zero()
                 }
             }
-            NoteState::Retrigger(retrig_time) => {
+            NoteState::Retrigger {
+                start_time: retrigger_time,
+                ..
+            } => {
                 // Forcibly decay over RETRIGGER_TIME.
-                let time = (time - retrig_time) as f32 / RETRIGGER_TIME as f32;
+                let time = (time - retrigger_time) as f32 / RETRIGGER_TIME as f32;
                 T::lerp_retrigger(self.ease_from, T::zero(), time)
             }
         };
@@ -594,9 +622,13 @@ enum NoteState {
     /// The note has just been released. The field is in samples and denotes how many
     /// samples since the oscillator has started.
     Released(SampleTime),
-    /// The note has just be retriggered during a release. Time is in samples
-    /// since the oscillator has retriggered.
-    Retrigger(SampleTime),
+    /// The note has just be retriggered during a release. `start_time` denotes when this state was
+    /// entered (specifically: it is a timestamp of how many samples since the `Held` state was entered.)
+    /// The `event` field is the `NoteOnEvent` that should be applied once the Retrigger state ends.
+    Retrigger {
+        start_time: SampleTime,
+        event: NoteOnEvent,
+    },
 }
 
 /// A state transition for a note.
