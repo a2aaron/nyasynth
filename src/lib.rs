@@ -1,10 +1,11 @@
 #![feature(trait_alias)]
+#![feature(anonymous_lifetime_in_impl_trait)]
 
 #[macro_use]
 extern crate vst;
 
 mod chorus;
-mod common;
+pub mod common;
 mod ease;
 mod keys;
 mod neighbor_pairs;
@@ -30,6 +31,7 @@ use vst::{
     editor::Editor,
     host::Host,
     plugin::{CanDo, Category, HostCallback, Info, Plugin, PluginParameters},
+    prelude::Event,
 };
 use wmidi::MidiMessage;
 
@@ -81,7 +83,7 @@ static FALLBACK_DATA_DIR: Lazy<&'static Path> = Lazy::new(|| Path::new("./nyasyn
 static FALLBACK_LOG_DIR: Lazy<&'static Path> = Lazy::new(|| Path::new("./nyasynth_VST/log"));
 
 /// The main plugin struct.
-struct Nyasynth {
+pub struct Nyasynth {
     /// All the notes to be played.
     notes: Vec<SoundGenerator>,
     /// The sample rate in Hz/sec (usually 44,100)
