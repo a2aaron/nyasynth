@@ -28,7 +28,7 @@ clap = { version = "4.1.8", features = ["derive"] }
 
 [profile.release]
 incremental = true
-# debug = true
+debug = true
 
 [lib]
 crate-type = ["cdylib", "lib"]

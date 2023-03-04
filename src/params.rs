@@ -62,7 +62,58 @@ const DEFAULT_POLYCAT: f32 = 0.0; // Off
 pub const MAX_CHORUS_DEPTH: f32 = 100.0;
 pub const MAX_CHORUS_DISTANCE: f32 = 1000.0;
 
+/// The public facing parameters struct containing the computed values for each parameter value.
+/// Avoid constructing too many of these--it is expensive to do so.
 pub struct MeowParameters {
+    pub master_vol: Decibel,
+    pub phase: f32,
+    pub noise_mix: f32,
+    pub portamento_time: Seconds,
+    pub pitchbend_max: usize,
+    pub polycat: bool,
+    pub vol_envelope: VolumeEnvelopeParams,
+    pub filter: FilterParams,
+    pub filter_envelope: FilterEnvelopeParams,
+    pub chorus: ChorusParams,
+    pub vibrato_attack: VibratoEnvelopeParams,
+    pub vibrato_lfo: VibratoLFOParams,
+}
+
+impl MeowParameters {
+    /// Construct a MeowParameters from a normal Parameters. Doing this calls a lot of easing functions
+    /// so avoid calling it too often (once per block, or ideally only once every time a parameter
+    /// updates).
+    pub fn new(parameters: &Parameters, tempo: f32) -> MeowParameters {
+        let master_vol = parameters.master_vol();
+        let phase = parameters.phase();
+        let noise_mix = parameters.noise_mix();
+        let portamento_time = parameters.portamento_time();
+        let pitchbend_max = parameters.pitchbend_max();
+        let polycat = parameters.polycat();
+        let vol_envelope = parameters.vol_envelope();
+        let filter = parameters.filter();
+        let filter_envelope = parameters.filter_envelope();
+        let chorus = parameters.chorus();
+        let vibrato_attack = parameters.vibrato_attack();
+        let vibrato_lfo = parameters.vibrato_lfo(tempo);
+        MeowParameters {
+            master_vol,
+            phase,
+            noise_mix,
+            portamento_time,
+            pitchbend_max,
+            polycat,
+            vol_envelope,
+            filter,
+            filter_envelope,
+            chorus,
+            vibrato_attack,
+            vibrato_lfo,
+        }
+    }
+}
+
+pub struct Parameters {
     // Public parameters (exposed in UI)
     meow_attack: Parameter<Seconds>,
     meow_decay: Parameter<Seconds>,
@@ -89,10 +140,10 @@ pub struct MeowParameters {
     phase: Parameter<f32>,
 }
 
-impl MeowParameters {
+impl Parameters {
     pub const NUM_PARAMS: usize = 22;
 
-    pub fn new() -> MeowParameters {
+    pub fn new() -> Parameters {
         fn filter_type_formatter(value: FilterType) -> (String, String) {
             let value = match value {
                 FilterType::SinglePoleLowPass => "Low Pass (Single Pole)",
@@ -172,7 +223,7 @@ impl MeowParameters {
             end: MAX_CHORUS_DISTANCE,
         };
 
-        MeowParameters {
+        Parameters {
             meow_attack: Parameter::time("Meow Attack", DEFAULT_MEOW_ATTACK, 0.001, 10.0),
             meow_decay: Parameter::time("Meow Decay", DEFAULT_MEOW_DECAY, 0.001, 5.0),
             meow_sustain: Parameter::decibel("Meow Sustain", DEFAULT_MEOW_SUSTAIN, meow_sustain),
@@ -232,31 +283,31 @@ impl MeowParameters {
         }
     }
 
-    pub fn master_vol(&self) -> Decibel {
+    fn master_vol(&self) -> Decibel {
         self.gain.get()
     }
 
-    pub fn phase(&self) -> f32 {
+    fn phase(&self) -> f32 {
         self.phase.get()
     }
 
-    pub fn noise_mix(&self) -> f32 {
+    fn noise_mix(&self) -> f32 {
         self.noise_mix.get()
     }
 
-    pub fn portamento_time(&self) -> Seconds {
+    fn portamento_time(&self) -> Seconds {
         self.portamento_time.get()
     }
 
-    pub fn pitchbend_max(&self) -> usize {
+    fn pitchbend_max(&self) -> usize {
         self.pitch_bend.get().0 as usize
     }
 
-    pub fn polycat(&self) -> bool {
+    fn polycat(&self) -> bool {
         self.polycat.get() > 0.5
     }
 
-    pub fn vol_envelope(&self) -> VolumeEnvelopeParams {
+    fn vol_envelope(&self) -> VolumeEnvelopeParams {
         let attack = self.meow_attack.get();
         let decay = self.meow_decay.get();
         let sustain = self.meow_sustain.get();
@@ -269,7 +320,7 @@ impl MeowParameters {
         }
     }
 
-    pub fn filter(&self) -> FilterParams {
+    fn filter(&self) -> FilterParams {
         let cutoff_freq = self.filter_cutoff_freq.get();
         let q_value = self.filter_q.get();
         let dry_wet = self.filter_dry_wet.get();
@@ -283,7 +334,7 @@ impl MeowParameters {
         }
     }
 
-    pub fn filter_envelope(&self) -> FilterEnvelopeParams {
+    fn filter_envelope(&self) -> FilterEnvelopeParams {
         let attack = self.meow_attack.get();
         let decay = self.meow_decay.get();
         let sustain = self.meow_sustain.get_raw();
@@ -298,7 +349,7 @@ impl MeowParameters {
         }
     }
 
-    pub fn chorus(&self) -> ChorusParams {
+    fn chorus(&self) -> ChorusParams {
         let rate = self.chorus_rate.get();
         let depth = self.chorus_depth.get();
         let min_distance = self.chorus_distance.get();
@@ -313,12 +364,12 @@ impl MeowParameters {
         }
     }
 
-    pub fn vibrato_attack(&self) -> VibratoEnvelopeParams {
+    fn vibrato_attack(&self) -> VibratoEnvelopeParams {
         let attack = self.vibrato_attack.get();
         VibratoEnvelopeParams { attack }
     }
 
-    pub fn vibrato_lfo(&self, tempo: f32) -> VibratoLFOParams {
+    fn vibrato_lfo(&self, tempo: f32) -> VibratoLFOParams {
         let speed = self.vibrato_rate.get().as_hz(tempo);
         let amount = self.vibrato_amount.get();
         VibratoLFOParams { speed, amount }
@@ -354,7 +405,7 @@ impl MeowParameters {
     }
 }
 
-impl PluginParameters for MeowParameters {
+impl PluginParameters for Parameters {
     fn get_parameter_label(&self, index: i32) -> String {
         if let Some(parameter) = self.get(index) {
             parameter.text_unit
@@ -403,7 +454,7 @@ impl PluginParameters for MeowParameters {
             log::error!(
                 "Cannot set value for parameter index {} (expected value in range 0 to {})",
                 index,
-                MeowParameters::NUM_PARAMS
+                Parameters::NUM_PARAMS
             )
         }
     }

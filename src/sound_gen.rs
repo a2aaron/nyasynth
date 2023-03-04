@@ -117,7 +117,7 @@ impl SoundGenerator {
             NoteState::Released(release_time) => {
                 // The number of seconds it has been since release
                 let time = sample_rate.to_seconds(self.samples_since_note_on - release_time);
-                time < params.vol_envelope().release()
+                time < params.vol_envelope.release()
             }
         }
     }
@@ -207,7 +207,7 @@ impl SoundGenerator {
             &params,
             self.get_note_context(sample_rate),
             self.vel,
-            self.get_current_pitch(sample_rate, params.portamento_time()),
+            self.get_current_pitch(sample_rate, params.portamento_time),
             pitch_bend,
             vibrato_mod,
         );
@@ -334,7 +334,7 @@ impl OSCGroup {
         let sample_rate = context.sample_rate;
 
         // Compute volume from parameters
-        let vol_env = self.vol_env.get(&params.vol_envelope(), context);
+        let vol_env = self.vol_env.get(&params.vol_envelope, context);
 
         // Apply parameter, ADSR, LFO, and AmpMod for total volume
         // We clamp the LFO to positive values because negative values cause the
@@ -343,9 +343,9 @@ impl OSCGroup {
         // the signal allows for more interesting audio.
         let total_volume = base_vel.0 * vol_env.get_amp().max(0.0);
 
-        let pitch_bend = to_pitch_multiplier(pitch_bend, params.pitchbend_max() as f32);
+        let pitch_bend = to_pitch_multiplier(pitch_bend, params.pitchbend_max as f32);
 
-        let vibrato_env = self.vibrato_env.get(&params.vibrato_attack(), context);
+        let vibrato_env = self.vibrato_env.get(&params.vibrato_attack, context);
         let pitch_mods = to_pitch_multiplier(vibrato_mod, vibrato_env * 2.0);
 
         // The final pitch multiplier, post-FM
@@ -362,18 +362,18 @@ impl OSCGroup {
         // Get next sample
         let value = self
             .osc
-            .next_sample(sample_rate, shape, pitch, params.phase());
+            .next_sample(sample_rate, shape, pitch, params.phase);
 
         // Apply noise
         let noise = NoteShape::Noise.get(0.0);
-        let value = value + noise * params.noise_mix();
+        let value = value + noise * params.noise_mix;
         // TODO: check if the noise is applied before or after the filter!
 
         // Apply filter
         let value = {
-            let filter = params.filter();
+            let filter = &params.filter;
             // TODO: investigate if this is correct
-            let filter_env = self.filter_env.get(&params.filter_envelope(), context);
+            let filter_env = self.filter_env.get(&params.filter_envelope, context);
 
             // Easing sort of experimentally determined. See the following:
             // https://www.desmos.com/calculator/grjkm7iknd
@@ -382,7 +382,7 @@ impl OSCGroup {
 
             let cutoff_freq = common::Hertz::lerp_octave(
                 filter.cutoff_freq,
-                filter.cutoff_freq + params.filter_envelope().env_mod * base_vel_eased,
+                filter.cutoff_freq + params.filter_envelope.env_mod * base_vel_eased,
                 filter_env,
             );
 
@@ -402,7 +402,7 @@ impl OSCGroup {
             self.filter.update_coefficients(coefficents);
             let output = self.filter.run(value);
             if output.is_finite() {
-                lerp(value, output, params.filter().dry_wet)
+                lerp(value, output, params.filter.dry_wet)
             } else {
                 // If the output happens to be NaN or Infinity, output the
                 // original  signal instead. Hopefully, this will "reset"

@@ -24,7 +24,7 @@ use common::{SampleRate, Vel};
 use ease::lerp;
 use keys::KeyTracker;
 use once_cell::sync::Lazy;
-use params::MeowParameters;
+use params::{MeowParameters, Parameters};
 use vst::{
     api::{Events, Supported, TimeInfoFlags},
     buffer::AudioBuffer,
@@ -88,7 +88,7 @@ pub struct Nyasynth {
     /// The sample rate in Hz/sec (usually 44,100)
     sample_rate: SampleRate,
     /// The parameters which are shared with the VST host
-    params: Arc<MeowParameters>,
+    params: Arc<Parameters>,
     /// Pitchbend messages. Format is (value, frame_delta) where
     /// value is a normalized f32 and frame_delta is the offset into the current
     /// frame for which the pitchbend value occurs
@@ -111,7 +111,7 @@ impl Plugin for Nyasynth {
     fn new(host: HostCallback) -> Self {
         let sample_rate = SampleRate::from(44100.0);
         Nyasynth {
-            params: Arc::new(MeowParameters::new()),
+            params: Arc::new(Parameters::new()),
             notes: Vec::with_capacity(16),
             sample_rate,
             pitch_bend: Vec::with_capacity(16),
@@ -158,7 +158,7 @@ impl Plugin for Nyasynth {
             unique_id: i32::from_be_bytes([13, 5, 15, 23]), // "MEOW"
             version: 1,
             category: Category::Synth,
-            parameters: MeowParameters::NUM_PARAMS as i32,
+            parameters: Parameters::NUM_PARAMS as i32,
             // No audio inputs
             inputs: 0,
             // Two channel audio!
@@ -181,6 +181,8 @@ impl Plugin for Nyasynth {
 
     // Output audio given the current state of the VST
     fn process(&mut self, buffer: &mut AudioBuffer<f32>) {
+        let params = MeowParameters::new(&self.params, self.tempo as f32);
+
         let num_samples = buffer.samples();
 
         // Get the envelope from MIDI pitch bend
@@ -196,8 +198,8 @@ impl Plugin for Nyasynth {
         let mut left_out = vec![0.0; num_samples];
         let mut right_out = vec![0.0; num_samples];
 
-        let vibrato_params = self.params.vibrato_lfo(self.tempo as f32);
-        let chorus_params = self.params.chorus();
+        let vibrato_params = &params.vibrato_lfo;
+        let chorus_params = &params.chorus;
 
         for gen in &mut self.notes {
             for i in 0..num_samples {
@@ -210,13 +212,8 @@ impl Plugin for Nyasynth {
                     1.0,
                 ) * vibrato_params.amount;
 
-                let (left, right) = gen.next_sample(
-                    &self.params,
-                    i,
-                    self.sample_rate,
-                    pitch_bends[i],
-                    vibrato_mod,
-                );
+                let (left, right) =
+                    gen.next_sample(&params, i, self.sample_rate, pitch_bends[i], vibrato_mod);
 
                 left_out[i] += left;
                 right_out[i] += right;
@@ -236,12 +233,13 @@ impl Plugin for Nyasynth {
             let left = lerp(left, chorus, chorus_params.mix);
             let right = lerp(right, chorus, chorus_params.mix);
 
-            output_buffer[0][i] = left * self.params.master_vol().get_amp();
-            output_buffer[1][i] = right * self.params.master_vol().get_amp();
+            output_buffer[0][i] = left * params.master_vol.get_amp();
+            output_buffer[1][i] = right * params.master_vol.get_amp();
         }
     }
 
     fn process_events(&mut self, events: &Events) {
+        let params = MeowParameters::new(&self.params, self.tempo as f32);
         // remove "dead" notes
         // we do this in process_events _before_ processing any midi messages
         // because this is the start of a new frame, and we want to make sure
@@ -258,7 +256,6 @@ impl Plugin for Nyasynth {
             // only capture the `params` field, which avoids the issue of cannot borrow while
             // mutably borrowed
             let sample_rate = self.sample_rate;
-            let params = &self.params;
             self.notes.retain(|gen| gen.is_alive(sample_rate, &params));
         }
 
@@ -272,7 +269,7 @@ impl Plugin for Nyasynth {
                         match message {
                             MidiMessage::NoteOn(_, note, vel) => {
                                 let vel = Vel::from(vel);
-                                let polycat = self.params.polycat();
+                                let polycat = params.polycat;
                                 let bend_note = self.key_tracker.note_on(note, vel, polycat);
                                 if polycat {
                                     // In polycat mode, we simply add the new note.
@@ -297,7 +294,7 @@ impl Plugin for Nyasynth {
                                         let bend_from_current = !self.notes[0].is_released();
                                         self.notes[0].retrigger(
                                             self.sample_rate,
-                                            self.params.portamento_time(),
+                                            params.portamento_time,
                                             bend_from_current,
                                             note,
                                             vel,
@@ -307,7 +304,7 @@ impl Plugin for Nyasynth {
                                 };
                             }
                             MidiMessage::NoteOff(_, note, _) => {
-                                let polycat = self.params.polycat();
+                                let polycat = params.polycat;
                                 let top_of_stack = self.key_tracker.note_off(note);
 
                                 if polycat {
@@ -341,7 +338,7 @@ impl Plugin for Nyasynth {
                                             (Some(gen), Some((new_note, new_vel))) => gen
                                                 .retrigger(
                                                     self.sample_rate,
-                                                    self.params.portamento_time(),
+                                                    params.portamento_time,
                                                     true,
                                                     new_note,
                                                     new_vel,
