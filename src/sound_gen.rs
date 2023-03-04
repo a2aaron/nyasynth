@@ -453,18 +453,20 @@ impl Oscillator {
         pitch: Hertz,
         phase_mod: f32,
     ) -> f32 {
-        // Get the raw signal (we use rem_euclid here to constrain the angle
-        // between 0.0-1.0 (the normal % operator would allow for negative angles
-        // which we do not want!))
-        // NOTE: fract also does not do what we want, since that also allows for negative angles.
-        let value = shape.get((self.angle + phase_mod).rem_euclid(1.0));
+        // Get the raw signal. Note that we constrain the angle between 0.0-1.0. Since phase_mod is
+        // required to be positive and so is self.angle, then `fract` itself is also always positive
+        // and hence in 0.0-1.0 range. Note that we use `fract` instead of just doing `% 1.0` since
+        // fmod is slow.
+        let angle = (self.angle + phase_mod).fract();
+        let value = shape.get(angle);
 
         // Update the angle. Each sample is 1.0 / sample_rate apart for a
         // complete waveform. We also multiply by pitch to advance the right amount
         // We also constrain the angle between 0 and 1, as this reduces
         // roundoff error.
         let angle_delta = pitch.get() / sample_rate.get();
-        self.angle = (self.angle + angle_delta) % 1.0;
+        // Similary, compute (self.angle + angle_delta) % 1.0 without actually calling fmod
+        self.angle = (self.angle + angle_delta).fract();
 
         value
     }
