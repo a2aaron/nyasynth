@@ -6,6 +6,5 @@
 # ps aux | rg "vPlayer 3"
 
 
-trash Nyasynth86.vst
-cargo build --release --target x86_64-apple-darwin
-bash ./osx_bundler.sh Nyasynth86 target/x86_64-apple-darwin/release/libnyasynth.dylib
+cargo build --release
+xctrace record --template 'Time Profiler' --output $1.trace --launch -- target/release/perf --in megalovania.mid --out $2.wav --polycat --vst target/release/libnyasynth.dylib
