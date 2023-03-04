@@ -393,19 +393,22 @@ impl OSCGroup {
         // the signal allows for more interesting audio.
         let total_volume = base_vel.0 * vol_env.get_amp().max(0.0);
 
-        let pitch_bend = to_pitch_multiplier(pitch_bend, params.pitchbend_max as f32);
+        let pitch_multiplier = {
+            let pitch_bend_mod = pitch_bend * (params.pitchbend_max as f32);
 
-        let vibrato_env = self.vibrato_env.get(&params.vibrato_attack, context);
-        let pitch_mods = to_pitch_multiplier(vibrato_mod, vibrato_env * 2.0);
+            // Both vibrato_mod and vibrato_env are in the 0.0-1.0 range. We multiply by two here to
+            // allow the vibrato to modulate the pitch by up to two semitones.
+            let vibrato_env = self.vibrato_env.get(&params.vibrato_attack, context);
+            let vibrato_mod = vibrato_mod * vibrato_env * 2.0;
 
-        // The final pitch multiplier, post-FM
-        // Base note is the base note frequency, in hz
-        // Pitch mods consists of the applied pitch bend, pitch ADSR, pitch LFOs
-        // applied to it, with a max range of 12 semis.
-        // Fine and course pitchbend come from the parameters.
-        // The FM Mod comes from the modulation value.
-        // Mod bank pitch comes from the mod bank.
-        let pitch = base_note * pitch_mods * pitch_bend;
+            // Given any note, the note a single semitone away is 2^1/12 times the original note
+            // So (2^1/12)^n = 2^(n/12) is n semitones away.
+            // We take an exponential here because frequency is exponential with respect
+            // to note value
+            2.0f32.powf((vibrato_mod + pitch_bend_mod) / 12.0)
+        };
+
+        let pitch = base_note * pitch_multiplier;
 
         let shape = NoteShape::Sawtooth;
 
@@ -770,16 +773,4 @@ pub fn normalize_pitch_bend(pitch_bend: PitchBend) -> NormalizedPitchbend {
     let pitch_bend = pitch_bend as i16 - 0x2000;
     // convert to f32 - range [-1.0, 1.0]
     pitch_bend as f32 * (1.0 / 0x2000 as f32)
-}
-
-/// Convert a NormalizedPitchbend into a pitch multiplier. The multiplier is such
-/// that a `pitch_bend` of +1.0 will bend up by `semitones` semitones and a value
-/// of -1.0 will bend down by `semitones` semitones.
-pub fn to_pitch_multiplier(pitch_bend: NormalizedPitchbend, semitones: f32) -> f32 {
-    // Given any note, the note a single semitone away is 2^1/12 times the original note
-    // So (2^1/12)^n is n semitones away
-    let exponent = 2.0f32.powf(semitones / 12.0);
-    // We take an exponential here because frequency is exponential with respect
-    // to note value
-    exponent.powf(pitch_bend)
 }
