@@ -58,7 +58,7 @@ const DEFAULT_NOISE_MIX: f32 = 0.0;
 
 const DEFAULT_PITCHBEND: u8 = 12; // +12 semis
 const DEFAULT_PORTAMENTO: Seconds = Seconds::new(120.0 / 1000.0);
-const DEFAULT_POLYCAT: f32 = 0.0; // Off
+const DEFAULT_POLYCAT: bool = false; // Off
 
 pub const MAX_CHORUS_DEPTH: f32 = 100.0;
 pub const MAX_CHORUS_DISTANCE: f32 = 1000.0;
@@ -121,7 +121,7 @@ impl MeowParameters {
             noise_mix: noise_mix.get(),
             portamento_time: portamento_time.get(),
             pitchbend_max: pitch_bend.get(),
-            polycat: polycat.get() > 0.5,
+            polycat: polycat.get(),
             vol_envelope: VolumeEnvelopeParams {
                 attack: meow_attack.get(),
                 decay: meow_decay.get(),
@@ -176,7 +176,7 @@ pub struct Parameters {
     noise_mix: Parameter<f32>,
     chorus_mix: Parameter<f32>,
     pitch_bend: Parameter<u8>,
-    polycat: Parameter<f32>,
+    polycat: Parameter<bool>,
     // Internal parameter (not exposed by the original Meowsynth)
     gain: Parameter<Decibel>,
     filter_envlope_mod: Parameter<Hertz>,
@@ -228,8 +228,8 @@ impl Parameters {
             (format!("{}", value), "semis".to_string())
         }
 
-        fn polycat_formatter(value: f32) -> (String, String) {
-            if value < 0.5 {
+        fn polycat_formatter(value: bool) -> (String, String) {
+            if value {
                 ("Off".to_string(), "".to_string())
             } else {
                 ("On".to_string(), "".to_string())
@@ -254,7 +254,6 @@ impl Parameters {
 
         let meow_sustain = Decibel::ease_db(-24.0, 0.0);
 
-        let polycat = Easing::linear(0.0, 1.0);
         let gain = Decibel::ease_db(-36.0, 12.0);
         let filter_envelope_mod = Hertz::ease_exp(0.0, 22100.0);
         let filter_cutoff_freq = Hertz::ease_exp(20.0, 22100.0);
@@ -286,7 +285,7 @@ impl Parameters {
                 [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
                 semitone_formatter,
             ),
-            polycat: Parameter::new("Polycat", DEFAULT_POLYCAT, polycat, polycat_formatter),
+            polycat: Parameter::new("Polycat", DEFAULT_POLYCAT, [false, true], polycat_formatter),
             // Internal parameters (might not be exposed)
             gain: Parameter::decibel("Master Volume", DEFAULT_MASTER_VOL, gain),
             filter_envlope_mod: Parameter::freq(
