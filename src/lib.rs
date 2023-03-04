@@ -35,8 +35,8 @@ use vst::{
 use wmidi::MidiMessage;
 
 use sound_gen::{
-    normalize_pitch_bend, to_pitch_envelope, NormalizedPitchbend, NoteShape, Oscillator,
-    SoundGenerator, RETRIGGER_TIME,
+    normalize_pitch_bend, to_pitch_envelope, NoiseGenerator, NormalizedPitchbend, NoteShape,
+    Oscillator, SoundGenerator, RETRIGGER_TIME,
 };
 
 static PROJECT_DIRS: Lazy<Option<directories::ProjectDirs>> =
@@ -105,6 +105,8 @@ pub struct Nyasynth {
     chorus: Chorus,
     /// The host callback
     host: HostCallback,
+    /// The global noise generator
+    noise_generator: NoiseGenerator,
 }
 
 impl Plugin for Nyasynth {
@@ -121,6 +123,7 @@ impl Plugin for Nyasynth {
             vibrato_lfo: Oscillator::new(),
             chorus: Chorus::new(sample_rate),
             host,
+            noise_generator: NoiseGenerator::new(),
         }
     }
 
@@ -212,8 +215,14 @@ impl Plugin for Nyasynth {
                     1.0,
                 ) * vibrato_params.amount;
 
-                let (left, right) =
-                    gen.next_sample(&params, i, self.sample_rate, pitch_bends[i], vibrato_mod);
+                let (left, right) = gen.next_sample(
+                    &params,
+                    &mut self.noise_generator,
+                    i,
+                    self.sample_rate,
+                    pitch_bends[i],
+                    vibrato_mod,
+                );
 
                 left_out[i] += left;
                 right_out[i] += right;

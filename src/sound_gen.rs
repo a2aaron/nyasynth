@@ -23,6 +23,45 @@ type Angle = f32;
 /// and -1.0 means "max downward bend"
 pub type NormalizedPitchbend = f32;
 
+/// A small noise generator using xorshift.
+pub struct NoiseGenerator {
+    state: u32,
+}
+
+impl NoiseGenerator {
+    pub const fn new() -> NoiseGenerator {
+        NoiseGenerator { state: 413 }
+    }
+
+    fn next(&mut self) -> f32 {
+        // RNG algorithm used here is Xorshift, specifically the one listed at Wikipedia
+        // https://en.wikipedia.org/wiki/Xorshift
+        let x = self.state;
+        let x = x ^ (x << 13);
+        let x = x ^ (x >> 17);
+        let x = x ^ (x << 5);
+        self.state = x;
+
+        // Mantissa trick: Every float in [2.0 - 4.0] is evenly spaced
+        // so if you want evenly distributed floats, just jam random bits in the mantissa
+        // and then convert to the appropriate range by subtraciting.
+
+        // set exponent + sign bit to zero
+        let x = x & 0b0_00000000_11111111111111111111111;
+        // set exponent to 1000000
+        let x = x | 0b0_10000000_00000000000000000000000;
+        // This ensures x has the following value:
+        // 0 10000000 XXXXXXXXXXXXXXXXXXXXXXX
+        // ^ ^^^^^^^^ ^^^^^^^^^^^^^^^^^^^^^^^
+        // | |        mantissa
+        // | exponent
+        // sign
+        // Where X is a random bit, and 0 or 1 are constant. This ensures that x, interpreted as a
+        // float, is a randomly chosen float in range [2.0 - 4.0]
+        // Finally, to get the [-1.0, 1.0] range, we just subtract by 3.0.
+        f32::from_bits(x) - 3.0
+    }
+}
 // A type that an Envelope and EnvelopeParameter can work with. This type must
 // support addition and subtraction and scalar multiplication with f32. It can also
 // specify the easing used for the attack, decay, release, and retrigger phases
@@ -125,6 +164,7 @@ impl SoundGenerator {
     pub fn next_sample(
         &mut self,
         params: &MeowParameters,
+        noise_generator: &mut NoiseGenerator,
         i: FrameDelta,
         sample_rate: SampleRate,
         pitch_bend: f32,
@@ -206,6 +246,7 @@ impl SoundGenerator {
         let osc_1 = self.osc_1.next_sample(
             &params,
             self.get_note_context(sample_rate),
+            noise_generator,
             self.vel,
             self.get_current_pitch(sample_rate, params.portamento_time),
             pitch_bend,
@@ -326,6 +367,7 @@ impl OSCGroup {
         &mut self,
         params: &MeowParameters,
         context: NoteContext,
+        noise_generator: &mut NoiseGenerator,
         base_vel: Vel,
         base_note: Hertz,
         pitch_bend: f32,
@@ -357,7 +399,7 @@ impl OSCGroup {
         // Mod bank pitch comes from the mod bank.
         let pitch = base_note * pitch_mods * pitch_bend;
 
-        let shape = NoteShape::Skewtooth(1.0);
+        let shape = NoteShape::Sawtooth;
 
         // Get next sample
         let value = self
@@ -365,7 +407,7 @@ impl OSCGroup {
             .next_sample(sample_rate, shape, pitch, params.phase);
 
         // Apply noise
-        let noise = NoteShape::Noise.get(0.0);
+        let noise = noise_generator.next();
         let value = value + noise * params.noise_mix;
         // TODO: check if the noise is applied before or after the filter!
 
@@ -632,61 +674,20 @@ enum NoteStateEdge {
     NoteRetriggered, // The note is being pressed, but not the first time
 }
 
-/// The shape of a note. The associated f32 indicates the "warp" of the note.
-/// The warp is a value between 0.0 and 1.0.
 #[derive(Debug, Clone, Copy, VariantCount)]
 pub enum NoteShape {
     /// A sine wave
     Sine,
-    /// A duty-cycle wave. The note is a square wave when the warp is 0.5.
-    /// The warp for this NoteShape is clamped between 0.001 and 0.999.
-    Square(f32),
-    /// A NoteShape which warps between a sawtooth and triangle wave.
-    /// Sawtooths: 0.0 and 1.0
-    /// Triangle: 0.5
-    Skewtooth(f32),
-    /// White noise
-    Noise,
+    /// A sawtooth wave
+    Sawtooth,
 }
 
 impl NoteShape {
     /// Return the raw waveform using the given angle
     fn get(&self, angle: Angle) -> f32 {
         match self {
-            // See https://www.desmos.com/calculator/dqg8kdvung for visuals
-            // and https://www.desmos.com/calculator/hs8zd0sfkh for more visuals
             NoteShape::Sine => (angle * TAU).sin(),
-            NoteShape::Square(warp) => {
-                // This clamp is used to prevent the note from being completely
-                // silent, which would occur at 0.0 and 1.0.
-                if angle < (*warp).clamp(0.001, 0.999) {
-                    -1.0
-                } else {
-                    1.0
-                }
-            }
-            NoteShape::Skewtooth(warp) => {
-                let warp = *warp;
-                // Check if the warp makes the note a sawtooth and directly calculate
-                // it. This avoids potential divide by zero issues.
-                // Clippy lint complains about floating point compares but this
-                // is ok to do since 1.0 is exactly representible in floating
-                // point and also warp is always in range [0.0, 1.0].
-                #[allow(clippy::float_cmp)]
-                if warp == 0.0 {
-                    return -2.0 * angle + 1.0;
-                } else if warp == 1.0 {
-                    return 2.0 * angle - 1.0;
-                }
-
-                // Otherwise, compute a triangle/skewed triangle shape.
-                if angle < warp {
-                    (2.0 * angle / warp) - 1.0
-                } else {
-                    -(2.0 * (angle - warp)) / (1.0 - warp) + 1.0
-                }
-            }
-            NoteShape::Noise => rand::Rng::gen_range(&mut rand::thread_rng(), -1.0..1.0),
+            NoteShape::Sawtooth => 2.0 * angle - 1.0,
         }
     }
 }
@@ -696,23 +697,7 @@ impl std::fmt::Display for NoteShape {
         use NoteShape::*;
         let string = match self {
             Sine => "Sine",
-            Square(warp) => {
-                if (warp - 0.5).abs() < 0.1 {
-                    "Square"
-                } else {
-                    "Pulse"
-                }
-            }
-            Skewtooth(warp) => {
-                if (warp - 0.0).abs() < 0.1 || (warp - 1.0).abs() < 0.1 {
-                    "Sawtooth"
-                } else if (warp - 0.5).abs() < 0.1 {
-                    "Triangle"
-                } else {
-                    "Skewtooth"
-                }
-            }
-            Noise => "Noise",
+            Sawtooth => "Sawtooth",
         };
 
         write!(f, "{}", string)
