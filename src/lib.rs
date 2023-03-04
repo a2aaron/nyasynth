@@ -31,7 +31,6 @@ use vst::{
     editor::Editor,
     host::Host,
     plugin::{CanDo, Category, HostCallback, Info, Plugin, PluginParameters},
-    prelude::Event,
 };
 use wmidi::MidiMessage;
 
@@ -237,8 +236,8 @@ impl Plugin for Nyasynth {
             let left = lerp(left, chorus, chorus_params.mix);
             let right = lerp(right, chorus, chorus_params.mix);
 
-            output_buffer[0][i] = left;
-            output_buffer[1][i] = right;
+            output_buffer[0][i] = left * self.params.master_vol().get_amp();
+            output_buffer[1][i] = right * self.params.master_vol().get_amp();
         }
     }
 

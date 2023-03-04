@@ -13,7 +13,7 @@ rand = "0.8.5"
 log = "0.4.17"
 simple-logging = "2.0.2"
 variant_count = "1.0.0"
-derive_more = "0.99.11"
+derive_more = "0.99"
 backtrace = "0.3"
 biquad = "0.4.0"
 ordered-float = "3.4.0"
@@ -23,6 +23,7 @@ directories = "4.0.1"
 once_cell = "1.7.2"
 midly = "0.5.3"
 wav = "1.0.0"
+clap = { version = "4.1.8", features = ["derive"] }
 
 
 [profile.release]

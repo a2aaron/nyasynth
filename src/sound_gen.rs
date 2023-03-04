@@ -341,7 +341,7 @@ impl OSCGroup {
         // signal to be inverted, which isn't what we want (instead it should
         // just have zero volume). We don't do this for the AmpMod because inverting
         // the signal allows for more interesting audio.
-        let total_volume = base_vel.0 * (params.master_vol() + vol_env).get_amp().max(0.0);
+        let total_volume = base_vel.0 * vol_env.get_amp().max(0.0);
 
         let pitch_bend = to_pitch_multiplier(pitch_bend, params.pitchbend_max() as f32);
 

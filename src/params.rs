@@ -28,7 +28,7 @@ const VIBRATO_RATES: [VibratoRate; 8] = [
 ];
 
 // Default values for master volume
-const DEFAULT_MASTER_VOL: Decibel = Decibel::from_db(-3.0); // -3 dB
+const DEFAULT_MASTER_VOL: Decibel = Decibel::from_db(-6.0);
 
 // Default values for volume envelope
 const DEFAULT_MEOW_ATTACK: Seconds = Seconds::new(30.0 / 1000.0);

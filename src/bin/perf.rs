@@ -1,10 +1,11 @@
 use std::{
     collections::BTreeMap,
     error::Error,
-    path::Path,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
 
+use clap::Parser;
 use derive_more::{Add, AddAssign, From, Into, Sub, SubAssign};
 use nyasynth::{
     self,
@@ -305,11 +306,24 @@ fn print_events<'a>(events: impl IntoIterator<Item = &'a vst::event::Event<'a>>)
     }
 }
 
+#[derive(Debug, Parser)]
+struct Args {
+    #[arg(short, long = "vst")]
+    vst_path: PathBuf,
+    #[arg(short, long = "in")]
+    in_file: PathBuf,
+    #[arg(short, long = "out")]
+    out_file: PathBuf,
+    #[arg(short, long)]
+    polycat: bool,
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
+    let args = Args::parse();
     let block_size = 1024;
     let sample_rate = SampleRate(44100.0);
 
-    let raw = std::fs::read("megalovania_melody.mid")?;
+    let raw = std::fs::read(args.in_file)?;
     let smf = midly::Smf::parse(&raw)?;
 
     let tempo_info = TempoInfo::new(&smf);
@@ -318,29 +332,31 @@ fn main() -> Result<(), Box<dyn Error>> {
     let host = SimpleHost::new(block_size, tempo_info.beats_per_minute());
     let host = Arc::new(Mutex::new(host));
 
-    let path = Path::new("./Nyasynth.vst/Contents/MacOS/Nyasynth");
+    let path = Path::new(&args.vst_path);
     let mut loader = PluginLoader::load(path, host)?;
     let mut nyasynth = loader.instance()?;
 
-    // let mut nyasynth = Nyasynth::new(callback);
     nyasynth.init();
 
     nyasynth.set_sample_rate(sample_rate.0);
     nyasynth.set_block_size(block_size as i64);
 
     nyasynth.resume();
+    nyasynth
+        .get_parameter_object()
+        .set_parameter(11, if args.polycat { 1.0 } else { 0.0 });
 
-    let mut outputs: Vec<f32> = vec![];
+    let mut outputs: Vec<f32> = Vec::with_capacity(8_000_000);
+
+    let mut host_buffer = HostBuffer::new(0, 2);
+    let mut output_arrays = vec![vec![0.0; block_size]; 2];
+    let mut audio_buffer = host_buffer.bind::<Vec<f32>, Vec<f32>>(&vec![], &mut output_arrays);
 
     for i in 0..(blocks.max_block() + 100) {
         let block = blocks.get(i);
 
         let mut events_buffer = SendEventBuffer::new(64);
         events_buffer.store_events(block.iter());
-
-        let mut host_buffer = HostBuffer::new(0, 2);
-        let mut output_arrays = vec![vec![0.0; block_size]; 2];
-        let mut audio_buffer = host_buffer.bind::<Vec<f32>, Vec<f32>>(&vec![], &mut output_arrays);
 
         nyasynth.process_events(events_buffer.events());
         nyasynth.process(&mut audio_buffer);
@@ -349,7 +365,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         outputs.extend_from_slice(output_left);
     }
 
-    let mut out_file = std::fs::File::create("recordings/output.wav")?;
+    let mut out_file = std::fs::File::create(args.out_file)?;
     let header = wav::Header::new(wav::WAV_FORMAT_IEEE_FLOAT, 1, 44100, 32);
     wav::write(
         header,

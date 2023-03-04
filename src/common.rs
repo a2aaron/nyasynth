@@ -357,6 +357,7 @@ impl From<biquad::Type<f32>> for FilterType {
             biquad::Type::HighPass => FilterType::HighPass,
             biquad::Type::BandPass => FilterType::BandPass,
             biquad::Type::Notch => FilterType::Notch,
+            biquad::Type::SinglePoleLowPassApprox => todo!(),
             biquad::Type::AllPass => todo!(),
             biquad::Type::LowShelf(_) => todo!(),
             biquad::Type::HighShelf(_) => todo!(),
