@@ -2,7 +2,7 @@ use vst::{plugin::PluginParameters, util::AtomicFloat};
 
 use crate::common::{Decibel, I32Divable, Seconds};
 use crate::common::{FilterType, Hertz};
-use crate::ease::{DiscreteLinear, Easer, Easing};
+use crate::ease::{Easer, Easing};
 use crate::sound_gen::NoteShape;
 
 const IDENTITY: Easing<f32> = Easing::Linear {
@@ -210,9 +210,7 @@ impl Parameters {
         }
 
         let meow_sustain = Decibel::ease_db(-24.0, 0.0);
-        let vibrato_rate = DiscreteLinear {
-            values: VIBRATO_RATES,
-        };
+
         let pitch_bend = Easing::SteppedLinear {
             start: I32Divable(1),
             end: I32Divable(12),
@@ -223,9 +221,6 @@ impl Parameters {
             end: 1.0,
         };
         let gain = Decibel::ease_db(-36.0, 12.0);
-        let filter_type = DiscreteLinear {
-            values: FILTER_TYPES,
-        };
         let filter_envelope_mod = Hertz::ease_exp(0.0, 22100.0);
         let filter_cutoff_freq = Hertz::ease_exp(20.0, 22100.0);
         let filter_q = Easing::Linear {
@@ -253,7 +248,7 @@ impl Parameters {
             vibrato_rate: Parameter::new(
                 "Vibrato Rate",
                 DEFAULT_VIBRATO_RATE,
-                vibrato_rate,
+                VIBRATO_RATES,
                 vibrato_formatter,
             ),
             portamento_time: Parameter::time("Portamento", DEFAULT_PORTAMENTO, 0.0001, 5.0),
@@ -278,7 +273,7 @@ impl Parameters {
             filter_type: Parameter::new(
                 "Filter Type",
                 DEFAULT_FILTER_TYPE,
-                filter_type,
+                FILTER_TYPES,
                 filter_type_formatter,
             ),
             filter_cutoff_freq: Parameter::freq(
@@ -303,13 +298,13 @@ impl Parameters {
             vibrato_note_shape: Parameter::new(
                 "Vibrato Note Shape",
                 NoteShape::Triangle(0.5),
-                DiscreteLinear::from([NoteShape::Triangle(0.5), NoteShape::Sine]),
+                [NoteShape::Triangle(0.5), NoteShape::Sine],
                 note_shape_formatter,
             ),
             chorus_note_shape: Parameter::new(
                 "Chorus Note Shape",
                 NoteShape::Sine,
-                DiscreteLinear::from([NoteShape::Triangle(0.5), NoteShape::Sine]),
+                [NoteShape::Triangle(0.5), NoteShape::Sine],
                 note_shape_formatter,
             ),
         }

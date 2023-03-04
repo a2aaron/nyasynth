@@ -98,27 +98,17 @@ impl<T: Lerpable + InvLerpable> Easer<T> for Easing<T> {
     }
 }
 
-pub struct DiscreteLinear<T, const N: usize> {
-    pub values: [T; N],
-}
-
-impl<T: PartialEq + Copy, const N: usize> Easer<T> for DiscreteLinear<T, N> {
+impl<T: PartialEq + Copy, const N: usize> Easer<T> for [T; N] {
     fn ease(&self, t: f32) -> T {
-        let index = (t * self.values.len() as f32).floor() as usize;
-        self.values[index.clamp(0, self.values.len() - 1)]
+        let index = (t * self.len() as f32).floor() as usize;
+        self[index.clamp(0, self.len() - 1)]
     }
 
     fn inv_ease(&self, val: T) -> f32 {
-        match self.values.iter().position(|&x| x == val) {
-            Some(index) => (index as f32) / (self.values.len() as f32),
+        match self.iter().position(|&x| x == val) {
+            Some(index) => (index as f32) / (self.len() as f32),
             None => 0.0,
         }
-    }
-}
-
-impl<T, const N: usize> From<[T; N]> for DiscreteLinear<T, N> {
-    fn from(values: [T; N]) -> Self {
-        DiscreteLinear { values }
     }
 }
 
