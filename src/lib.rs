@@ -196,10 +196,13 @@ impl Plugin for Nyasynth {
         let pitch_bends: Vec<f32> = pitch_bends.collect();
 
         // Get sound for each note
-        let (_, mut output_buffer) = buffer.split();
+        let (_, output_buffer) = buffer.split();
 
-        let mut left_out = vec![0.0; num_samples];
-        let mut right_out = vec![0.0; num_samples];
+        let (left_out, right_out) = &mut output_buffer.split_at_mut(1);
+        let left_out = &mut left_out[0];
+        let right_out = &mut right_out[0];
+        left_out.fill(0.0);
+        right_out.fill(0.0);
 
         let vibrato_params = &params.vibrato_lfo;
         let chorus_params = &params.chorus;
@@ -245,8 +248,8 @@ impl Plugin for Nyasynth {
             let left = lerp(left, chorus, chorus_params.mix);
             let right = lerp(right, chorus, chorus_params.mix);
 
-            output_buffer[0][i] = left * params.master_vol.get_amp();
-            output_buffer[1][i] = right * params.master_vol.get_amp();
+            left_out[i] = left * params.master_vol.get_amp();
+            right_out[i] = right * params.master_vol.get_amp();
         }
     }
 
