@@ -29,8 +29,16 @@ pub struct NoiseGenerator {
 }
 
 impl NoiseGenerator {
-    pub const fn new() -> NoiseGenerator {
-        NoiseGenerator { state: 413 }
+    pub fn new() -> NoiseGenerator {
+        let mut bytes = [0, 0, 0, 0];
+        // If this fails, then we just default to the random seed of 413. Any non-zero seed is acceptable
+        // for our white noise generating purposes. Also, this almost certainly won't fail.
+        let _ = getrandom::getrandom(&mut bytes);
+        let mut seed = u32::from_be_bytes(bytes);
+        if seed == 0 {
+            seed = 413
+        }
+        NoiseGenerator { state: seed }
     }
 
     fn next(&mut self) -> f32 {

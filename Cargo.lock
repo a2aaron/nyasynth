@@ -412,6 +412,7 @@ dependencies = [
  "clap",
  "derive_more",
  "directories",
+ "getrandom",
  "log",
  "midly",
  "once_cell",
