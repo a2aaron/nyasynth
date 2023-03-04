@@ -117,9 +117,9 @@ pub struct SoundGenerator {
     pub note: wmidi::Note,
     // The ending pitch from which portamento ends up at. This and `start_pitch` are unaffected by
     // by pitch bend and pitch modifiers.
-    end_pitch: Hertz,
+    end_pitch: Pitch,
     // The starting pitch from which portamento bends from.
-    start_pitch: Hertz,
+    start_pitch: Pitch,
     // The velocity of the note that this SoundGenerator is playing, ignoring all
     // amplitude modulation effects. This is a 0.0 - 1.0 normalized value.
     vel: Vel,
@@ -141,7 +141,7 @@ pub struct SoundGenerator {
 
 impl SoundGenerator {
     pub fn new(note: wmidi::Note, vel: Vel, sample_rate: SampleRate) -> SoundGenerator {
-        let end_pitch = Hertz::from(note);
+        let end_pitch = Pitch::from_note(note);
         let start_pitch = end_pitch;
         SoundGenerator {
             note,
@@ -256,7 +256,8 @@ impl SoundGenerator {
             self.get_note_context(sample_rate),
             noise_generator,
             self.vel,
-            self.get_current_pitch(sample_rate, params.portamento_time),
+            self.get_current_pitch(sample_rate, params.portamento_time)
+                .into_hertz(),
             pitch_bend,
             vibrato_mod,
         );
@@ -265,7 +266,7 @@ impl SoundGenerator {
     }
 
     pub fn note_on(&mut self, frame_delta: i32, vel: Vel, bend_note: Option<wmidi::Note>) {
-        let start_pitch = bend_note.map(Hertz::from);
+        let start_pitch = bend_note.map(Pitch::from_note);
         let note_on = NoteOnEvent::new(self.note, vel, start_pitch);
         self.next_note_on = Some((frame_delta as usize, note_on));
     }
@@ -311,13 +312,13 @@ impl SoundGenerator {
         }
     }
 
-    fn get_current_pitch(&self, sample_rate: SampleRate, portamento_time: Seconds) -> Hertz {
+    fn get_current_pitch(&self, sample_rate: SampleRate, portamento_time: Seconds) -> Pitch {
         let context = self.get_note_context(sample_rate);
         let time = context
             .sample_rate
             .to_seconds(context.samples_since_note_on);
         let t = (time / portamento_time).clamp(0.0, 1.0);
-        Hertz::lerp_octave(self.start_pitch, self.end_pitch, t)
+        lerp(self.start_pitch, self.end_pitch, t)
     }
 
     /// Apply the values contained within a NoteOnEvent. This is used to set the velocity and pitch
@@ -327,7 +328,7 @@ impl SoundGenerator {
         self.note = event.note;
         self.vel = event.vel;
         self.start_pitch = event.start_pitch;
-        self.end_pitch = event.end_pitch();
+        self.end_pitch = event.end_pitch;
     }
 }
 
@@ -542,21 +543,20 @@ struct NoteContext {
 struct NoteOnEvent {
     vel: Vel,
     note: wmidi::Note,
-    start_pitch: Hertz,
+    start_pitch: Pitch,
+    end_pitch: Pitch,
 }
 
 impl NoteOnEvent {
-    fn new(note: wmidi::Note, vel: Vel, start_pitch: Option<Hertz>) -> NoteOnEvent {
-        let start_pitch = start_pitch.unwrap_or(Hertz::from(note));
+    fn new(note: wmidi::Note, vel: Vel, start_pitch: Option<Pitch>) -> NoteOnEvent {
+        let end_pitch = Pitch::from_note(note);
+        let start_pitch = start_pitch.unwrap_or(end_pitch);
         NoteOnEvent {
             vel,
             note,
             start_pitch,
+            end_pitch,
         }
-    }
-
-    fn end_pitch(&self) -> Hertz {
-        self.note.into()
     }
 }
 

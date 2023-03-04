@@ -136,6 +136,33 @@ impl From<f32> for Seconds {
     }
 }
 
+/// A struct representing linear pitch space. This exists so that portamento and filter cutoff
+/// sweep do not need to recompute their start and end frequencies every sample.
+#[derive(Debug, Clone, Copy, PartialEq, Add, Sub, From, Into)]
+pub struct Pitch(pub f32);
+
+impl Pitch {
+    pub fn from_note(value: wmidi::Note) -> Self {
+        Pitch(value.to_freq_f32().log2())
+    }
+
+    pub fn from_hertz(value: Hertz) -> Self {
+        Pitch(value.get().log2())
+    }
+
+    pub fn into_hertz(&self) -> Hertz {
+        Hertz(self.0.exp2())
+    }
+}
+
+impl std::ops::Mul<f32> for Pitch {
+    type Output = Pitch;
+
+    fn mul(self, rhs: f32) -> Self::Output {
+        Pitch(rhs * self.0)
+    }
+}
+
 /// A struct representing Hertz.
 #[derive(Debug, Clone, Copy, PartialEq, Add, Sub, From, Into)]
 pub struct Hertz(pub f32);
