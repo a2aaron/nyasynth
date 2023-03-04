@@ -1,5 +1,5 @@
 use crate::{
-    common::{self, Decibel, Hertz, Pitch, SampleRate, SampleTime, Seconds, Vel},
+    common::{Decibel, Hertz, Pitch, SampleRate, SampleTime, Seconds, Vel},
     ease::lerp,
     neighbor_pairs::NeighborPairsIter,
     params::{EnvelopeParams, MeowParameters},
@@ -137,10 +137,18 @@ pub struct SoundGenerator {
     // If Some(frame_delta), then the next note off event occurs in the next frame
     // at `frame_delta` samples into the frame
     next_note_off: Option<FrameDelta>,
+    // The computed filter sweep values. This is updated on NoteOn (or any note velocity change) as
+    // well as once per block.
+    filter_sweep: FilterSweeper,
 }
 
 impl SoundGenerator {
-    pub fn new(note: wmidi::Note, vel: Vel, sample_rate: SampleRate) -> SoundGenerator {
+    pub fn new(
+        params: &MeowParameters,
+        note: wmidi::Note,
+        vel: Vel,
+        sample_rate: SampleRate,
+    ) -> SoundGenerator {
         let end_pitch = Pitch::from_note(note);
         let start_pitch = end_pitch;
         SoundGenerator {
@@ -153,6 +161,7 @@ impl SoundGenerator {
             osc_1: OSCGroup::new(sample_rate),
             next_note_on: None,
             next_note_off: None,
+            filter_sweep: FilterSweeper::new(params, vel),
         }
     }
 
@@ -203,7 +212,7 @@ impl SoundGenerator {
                     NoteState::None => {
                         self.note_state = NoteState::Held;
 
-                        self.apply_note_on_event(event);
+                        self.apply_note_on_event(params, event);
                     }
                     _ => {
                         self.note_state = NoteState::Retrigger {
@@ -240,7 +249,7 @@ impl SoundGenerator {
         } = self.note_state
         {
             if self.samples_since_note_on - retrigger_time > RETRIGGER_TIME {
-                self.apply_note_on_event(event);
+                self.apply_note_on_event(params, event);
 
                 self.note_state = NoteState::Held;
                 self.samples_since_note_on = 0;
@@ -253,6 +262,7 @@ impl SoundGenerator {
         // in turn results in the `ease_from` values for envelopes changing.)
         let osc_1 = self.osc_1.next_sample(
             &params,
+            self.filter_sweep,
             self.get_note_context(sample_rate),
             noise_generator,
             self.vel,
@@ -324,11 +334,12 @@ impl SoundGenerator {
     /// Apply the values contained within a NoteOnEvent. This is used to set the velocity and pitch
     /// values that occur at the start of a note event (that is, this function should be called
     /// when entering the Held state).
-    fn apply_note_on_event(&mut self, event: NoteOnEvent) {
+    fn apply_note_on_event(&mut self, params: &MeowParameters, event: NoteOnEvent) {
         self.note = event.note;
         self.vel = event.vel;
         self.start_pitch = event.start_pitch;
         self.end_pitch = event.end_pitch;
+        self.filter_sweep = FilterSweeper::new(params, event.vel);
     }
 }
 
@@ -375,6 +386,7 @@ impl OSCGroup {
     fn next_sample(
         &mut self,
         params: &MeowParameters,
+        filter_sweep: FilterSweeper,
         context: NoteContext,
         noise_generator: &mut NoiseGenerator,
         base_vel: Vel,
@@ -432,11 +444,7 @@ impl OSCGroup {
             // TODO: investigate if this is correct
             let filter_env = self.filter_env.get(&params.filter_envelope, context);
 
-            let cutoff_freq = common::Hertz::lerp_octave(
-                filter.cutoff_freq,
-                filter.cutoff_freq + params.filter_envelope.env_mod * base_vel.eased,
-                filter_env,
-            );
+            let cutoff_freq = filter_sweep.lerp(filter_env);
 
             // avoid numerical instability encountered at very low
             // or high frequencies. Clamping at around 20 Hz also
@@ -476,6 +484,28 @@ impl OSCGroup {
             }
             _ => {}
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct FilterSweeper {
+    start_pitch: Pitch,
+    end_pitch: Pitch,
+}
+
+impl FilterSweeper {
+    fn new(params: &MeowParameters, base_vel: Vel) -> FilterSweeper {
+        let start_freq = params.filter.cutoff_freq;
+        let end_freq = params.filter.cutoff_freq + params.filter_envelope.env_mod * base_vel.eased;
+        FilterSweeper {
+            start_pitch: Pitch::from_hertz(start_freq),
+            end_pitch: Pitch::from_hertz(end_freq),
+        }
+    }
+
+    fn lerp(&self, t: f32) -> Hertz {
+        let pitch = lerp(self.start_pitch, self.end_pitch, t);
+        pitch.into_hertz()
     }
 }
 

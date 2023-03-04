@@ -282,7 +282,8 @@ impl Plugin for Nyasynth {
                                 let bend_note = self.key_tracker.note_on(note, vel, polycat);
                                 if polycat {
                                     // In polycat mode, we simply add the new note.
-                                    let mut gen = SoundGenerator::new(note, vel, self.sample_rate);
+                                    let mut gen =
+                                        SoundGenerator::new(&params, note, vel, self.sample_rate);
                                     gen.note_on(event.delta_frames, vel, bend_note);
                                     self.notes.push(gen);
                                 } else {
@@ -293,8 +294,12 @@ impl Plugin for Nyasynth {
 
                                     // If there are no generators playing, start a new note
                                     if self.notes.len() == 0 {
-                                        let mut gen =
-                                            SoundGenerator::new(note, vel, self.sample_rate);
+                                        let mut gen = SoundGenerator::new(
+                                            &params,
+                                            note,
+                                            vel,
+                                            self.sample_rate,
+                                        );
                                         gen.note_on(event.delta_frames, vel, None);
                                         self.notes.push(gen);
                                     } else {

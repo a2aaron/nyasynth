@@ -287,25 +287,6 @@ fn to_wmidi_event(
     }
 }
 
-fn to_string(event: &vst::event::Event) -> String {
-    match event {
-        VstEvent::Midi(midi) => {
-            format!(
-                "offset: {}, {:?}",
-                midi.delta_frames,
-                wmidi::MidiMessage::try_from(&midi.data as &[u8]).unwrap()
-            )
-        }
-        VstEvent::SysEx(_) => todo!(),
-        VstEvent::Deprecated(_) => todo!(),
-    }
-}
-fn print_events<'a>(events: impl IntoIterator<Item = &'a vst::event::Event<'a>>) {
-    for event in events {
-        println!("{}", to_string(event));
-    }
-}
-
 #[derive(Debug, Parser)]
 struct Args {
     #[arg(short, long = "vst")]
