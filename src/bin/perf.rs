@@ -330,6 +330,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Set noise on.
     // nyasynth.get_parameter_object().set_parameter(8, 1.0);
 
+    // Set vibrato amount
+    // nyasynth.get_parameter_object().set_parameter(4, 1.0);
+
+    // Set vibrato rate
+    // nyasynth.get_parameter_object().set_parameter(6, 0.5);
+
+    // Set chorus amount
+    // nyasynth.get_parameter_object().set_parameter(9, 0.5);
+
     let mut outputs: Vec<f32> = Vec::with_capacity(8_000_000);
 
     let mut host_buffer = HostBuffer::new(0, 2);

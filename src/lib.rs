@@ -35,8 +35,8 @@ use vst::{
 use wmidi::MidiMessage;
 
 use sound_gen::{
-    normalize_pitch_bend, to_pitch_envelope, NoiseGenerator, NormalizedPitchbend, NoteShape,
-    Oscillator, SoundGenerator, RETRIGGER_TIME,
+    normalize_pitch_bend, to_pitch_envelope, NoiseGenerator, NormalizedPitchbend, Oscillator,
+    SoundGenerator, RETRIGGER_TIME,
 };
 
 static PROJECT_DIRS: Lazy<Option<directories::ProjectDirs>> =
@@ -210,7 +210,7 @@ impl Plugin for Nyasynth {
                 // generator gets it's own vibrato envelope).
                 let vibrato_mod = self.vibrato_lfo.next_sample(
                     self.sample_rate,
-                    NoteShape::Sine,
+                    params.vibrato_note_shape,
                     vibrato_params.speed,
                     1.0,
                 ) * vibrato_params.amount;
@@ -235,9 +235,12 @@ impl Plugin for Nyasynth {
             let right = right_out[i];
 
             // Get the chorus effect
-            let chorus = self
-                .chorus
-                .next_sample(left, self.sample_rate, &chorus_params);
+            let chorus = self.chorus.next_sample(
+                left,
+                self.sample_rate,
+                &chorus_params,
+                params.chorus_note_shape,
+            );
 
             let left = lerp(left, chorus, chorus_params.mix);
             let right = lerp(right, chorus, chorus_params.mix);

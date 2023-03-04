@@ -713,33 +713,46 @@ enum NoteStateEdge {
     NoteRetriggered, // The note is being pressed, but not the first time
 }
 
-#[derive(Debug, Clone, Copy, VariantCount)]
+#[derive(Debug, Clone, Copy, VariantCount, PartialEq)]
 pub enum NoteShape {
     /// A sine wave
     Sine,
     /// A sawtooth wave
     Sawtooth,
+    /// A triangle wave, with a warp parameter.
+    Triangle(f32),
 }
 
 impl NoteShape {
     /// Return the raw waveform using the given angle
     fn get(&self, angle: Angle) -> f32 {
+        // See https://www.desmos.com/calculator/dqg8kdvung for visuals
+        // and https://www.desmos.com/calculator/hs8zd0sfkh for more visuals
         match self {
             NoteShape::Sine => (angle * TAU).sin(),
             NoteShape::Sawtooth => 2.0 * angle - 1.0,
+            NoteShape::Triangle(warp) => {
+                let warp = *warp;
+                // Check if the warp makes the note a sawtooth and directly calculate
+                // it. This avoids potential divide by zero issues.
+                // Clippy lint complains about floating point compares but this
+                // is ok to do since 1.0 is exactly representible in floating
+                // point and also warp is always in range [0.0, 1.0].
+                #[allow(clippy::float_cmp)]
+                if warp == 0.0 {
+                    return -2.0 * angle + 1.0;
+                } else if warp == 1.0 {
+                    return 2.0 * angle - 1.0;
+                }
+
+                // Otherwise, compute a triangle/skewed triangle shape.
+                if angle < warp {
+                    (2.0 * angle / warp) - 1.0
+                } else {
+                    -(2.0 * (angle - warp)) / (1.0 - warp) + 1.0
+                }
+            }
         }
-    }
-}
-
-impl std::fmt::Display for NoteShape {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use NoteShape::*;
-        let string = match self {
-            Sine => "Sine",
-            Sawtooth => "Sawtooth",
-        };
-
-        write!(f, "{}", string)
     }
 }
 

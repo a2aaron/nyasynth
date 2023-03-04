@@ -3,6 +3,7 @@ use vst::{plugin::PluginParameters, util::AtomicFloat};
 use crate::common::{Decibel, I32Divable, Seconds};
 use crate::common::{FilterType, Hertz};
 use crate::ease::{DiscreteLinear, Easer, Easing};
+use crate::sound_gen::NoteShape;
 
 const IDENTITY: Easing<f32> = Easing::Linear {
     start: 0.0,
@@ -77,6 +78,8 @@ pub struct MeowParameters {
     pub chorus: ChorusParams,
     pub vibrato_attack: VibratoEnvelopeParams,
     pub vibrato_lfo: VibratoLFOParams,
+    pub vibrato_note_shape: NoteShape,
+    pub chorus_note_shape: NoteShape,
 }
 
 impl MeowParameters {
@@ -96,6 +99,8 @@ impl MeowParameters {
         let chorus = parameters.chorus();
         let vibrato_attack = parameters.vibrato_attack();
         let vibrato_lfo = parameters.vibrato_lfo(tempo);
+        let vibrato_note_shape = parameters.vibrato_note_shape.get();
+        let chorus_note_shape = parameters.chorus_note_shape.get();
         MeowParameters {
             master_vol,
             phase,
@@ -109,6 +114,8 @@ impl MeowParameters {
             chorus,
             vibrato_attack,
             vibrato_lfo,
+            vibrato_note_shape,
+            chorus_note_shape,
         }
     }
 }
@@ -127,7 +134,7 @@ pub struct Parameters {
     chorus_mix: Parameter<f32>,
     pitch_bend: Parameter<I32Divable>,
     polycat: Parameter<f32>,
-    // Internal parametert not be exposed)
+    // Internal parameter (not exposed by the original Meowsynth)
     gain: Parameter<Decibel>,
     filter_envlope_mod: Parameter<Hertz>,
     filter_dry_wet: Parameter<f32>,
@@ -138,10 +145,15 @@ pub struct Parameters {
     chorus_distance: Parameter<f32>,
     chorus_rate: Parameter<Hertz>,
     phase: Parameter<f32>,
+    // "Debug" parameters (these might become not "debug" pretty soon)
+    vibrato_note_shape: Parameter<NoteShape>,
+    chorus_note_shape: Parameter<NoteShape>,
 }
 
 impl Parameters {
-    pub const NUM_PARAMS: usize = 22;
+    // 12 public parameters, plus 10 internal parameters
+    // (plus one debug parameter)
+    pub const NUM_PARAMS: usize = 12 + 10 + 2;
 
     pub fn new() -> Parameters {
         fn filter_type_formatter(value: FilterType) -> (String, String) {
@@ -187,6 +199,14 @@ impl Parameters {
 
         fn unitless_formatter(value: f32) -> (String, String) {
             (format!("{:.3}", value), "".to_string())
+        }
+
+        fn note_shape_formatter(note_shape: NoteShape) -> (String, String) {
+            match note_shape {
+                NoteShape::Sine => ("Sine".to_string(), "".to_string()),
+                NoteShape::Sawtooth => ("Sawtooth".to_string(), "".to_string()),
+                NoteShape::Triangle(_) => ("Triangle".to_string(), "".to_string()),
+            }
         }
 
         let meow_sustain = Decibel::ease_db(-24.0, 0.0);
@@ -280,6 +300,18 @@ impl Parameters {
             ),
             chorus_rate: Parameter::freq("Chorus Rate", DEFAULT_CHORUS_RATE, chorus_rate),
             phase: Parameter::new("Phase", DEFAULT_PHASE, IDENTITY, angle_formatter),
+            vibrato_note_shape: Parameter::new(
+                "Vibrato Note Shape",
+                NoteShape::Triangle(0.5),
+                DiscreteLinear::from([NoteShape::Triangle(0.5), NoteShape::Sine]),
+                note_shape_formatter,
+            ),
+            chorus_note_shape: Parameter::new(
+                "Chorus Note Shape",
+                NoteShape::Sine,
+                DiscreteLinear::from([NoteShape::Triangle(0.5), NoteShape::Sine]),
+                note_shape_formatter,
+            ),
         }
     }
 
@@ -376,7 +408,7 @@ impl Parameters {
     }
 
     fn get(&self, index: i32) -> Option<ParameterView> {
-        let view = match index {
+        let view = match index as usize {
             0 => self.meow_attack.view(),
             1 => self.meow_decay.view(),
             2 => self.meow_sustain.view(),
@@ -399,7 +431,9 @@ impl Parameters {
             19 => self.chorus_rate.view(),
             20 => self.phase.view(),
             21 => self.gain.view(),
-            _ => return None,
+            22 => self.vibrato_note_shape.view(),
+            23 => self.chorus_note_shape.view(),
+            Parameters::NUM_PARAMS | _ => return None,
         };
         Some(view)
     }
