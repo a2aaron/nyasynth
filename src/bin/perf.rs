@@ -346,6 +346,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         .get_parameter_object()
         .set_parameter(11, if args.polycat { 1.0 } else { 0.0 });
 
+    // Set noise on.
+    // nyasynth.get_parameter_object().set_parameter(8, 1.0);
+
     let mut outputs: Vec<f32> = Vec::with_capacity(8_000_000);
 
     let mut host_buffer = HostBuffer::new(0, 2);
