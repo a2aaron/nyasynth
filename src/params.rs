@@ -87,35 +87,75 @@ impl MeowParameters {
     /// so avoid calling it too often (once per block, or ideally only once every time a parameter
     /// updates).
     pub fn new(parameters: &Parameters, tempo: f32) -> MeowParameters {
-        let master_vol = parameters.master_vol();
-        let phase = parameters.phase();
-        let noise_mix = parameters.noise_mix();
-        let portamento_time = parameters.portamento_time();
-        let pitchbend_max = parameters.pitchbend_max();
-        let polycat = parameters.polycat();
-        let vol_envelope = parameters.vol_envelope();
-        let filter = parameters.filter();
-        let filter_envelope = parameters.filter_envelope();
-        let chorus = parameters.chorus();
-        let vibrato_attack = parameters.vibrato_attack();
-        let vibrato_lfo = parameters.vibrato_lfo(tempo);
-        let vibrato_note_shape = parameters.vibrato_note_shape.get();
-        let chorus_note_shape = parameters.chorus_note_shape.get();
-        MeowParameters {
-            master_vol,
-            phase,
-            noise_mix,
-            portamento_time,
-            pitchbend_max,
-            polycat,
-            vol_envelope,
-            filter,
-            filter_envelope,
-            chorus,
+        // This exhaustive destructuring helps ensure that if you add a field to Parameters, that you
+        // also need to add a field to MeowParameters.
+        let Parameters {
+            meow_attack,
+            meow_decay,
+            meow_sustain,
+            meow_release,
+            vibrato_amount,
             vibrato_attack,
-            vibrato_lfo,
+            vibrato_rate,
+            portamento_time,
+            noise_mix,
+            chorus_mix,
+            pitch_bend,
+            polycat,
+            gain,
+            filter_envlope_mod,
+            filter_dry_wet,
+            filter_q,
+            filter_type,
+            filter_cutoff_freq,
+            chorus_depth,
+            chorus_distance,
+            chorus_rate,
+            phase,
             vibrato_note_shape,
             chorus_note_shape,
+        } = parameters;
+        MeowParameters {
+            master_vol: gain.get(),
+            phase: phase.get(),
+            noise_mix: noise_mix.get(),
+            portamento_time: portamento_time.get(),
+            pitchbend_max: pitch_bend.get(),
+            polycat: polycat.get() > 0.5,
+            vol_envelope: VolumeEnvelopeParams {
+                attack: meow_attack.get(),
+                decay: meow_decay.get(),
+                sustain: meow_sustain.get(),
+                release: meow_release.get(),
+            },
+            filter: FilterParams {
+                cutoff_freq: filter_cutoff_freq.get(),
+                q_value: filter_q.get(),
+                filter_type: filter_type.get().into(),
+                dry_wet: filter_dry_wet.get(),
+            },
+            filter_envelope: FilterEnvelopeParams {
+                attack: meow_attack.get(),
+                decay: meow_decay.get(),
+                sustain: meow_sustain.get_raw(),
+                release: meow_release.get(),
+                env_mod: filter_envlope_mod.get(),
+            },
+            chorus: ChorusParams {
+                rate: chorus_rate.get(),
+                depth: chorus_depth.get(),
+                min_distance: chorus_distance.get(),
+                mix: chorus_mix.get(),
+            },
+            vibrato_attack: VibratoEnvelopeParams {
+                attack: vibrato_attack.get(),
+            },
+            vibrato_lfo: VibratoLFOParams {
+                speed: vibrato_rate.get().as_hz(tempo),
+                amount: vibrato_amount.get(),
+            },
+            vibrato_note_shape: vibrato_note_shape.get(),
+            chorus_note_shape: chorus_note_shape.get(),
         }
     }
 }
@@ -294,98 +334,6 @@ impl Parameters {
                 note_shape_formatter,
             ),
         }
-    }
-
-    fn master_vol(&self) -> Decibel {
-        self.gain.get()
-    }
-
-    fn phase(&self) -> f32 {
-        self.phase.get()
-    }
-
-    fn noise_mix(&self) -> f32 {
-        self.noise_mix.get()
-    }
-
-    fn portamento_time(&self) -> Seconds {
-        self.portamento_time.get()
-    }
-
-    fn pitchbend_max(&self) -> u8 {
-        self.pitch_bend.get()
-    }
-
-    fn polycat(&self) -> bool {
-        self.polycat.get() > 0.5
-    }
-
-    fn vol_envelope(&self) -> VolumeEnvelopeParams {
-        let attack = self.meow_attack.get();
-        let decay = self.meow_decay.get();
-        let sustain = self.meow_sustain.get();
-        let release = self.meow_release.get();
-        VolumeEnvelopeParams {
-            attack,
-            decay,
-            sustain,
-            release,
-        }
-    }
-
-    fn filter(&self) -> FilterParams {
-        let cutoff_freq = self.filter_cutoff_freq.get();
-        let q_value = self.filter_q.get();
-        let dry_wet = self.filter_dry_wet.get();
-
-        let filter_type = self.filter_type.get().into();
-        FilterParams {
-            cutoff_freq,
-            q_value,
-            filter_type,
-            dry_wet,
-        }
-    }
-
-    fn filter_envelope(&self) -> FilterEnvelopeParams {
-        let attack = self.meow_attack.get();
-        let decay = self.meow_decay.get();
-        let sustain = self.meow_sustain.get_raw();
-        let release = self.meow_release.get();
-        let env_mod = self.filter_envlope_mod.get();
-        FilterEnvelopeParams {
-            attack,
-            sustain,
-            decay,
-            env_mod,
-            release,
-        }
-    }
-
-    fn chorus(&self) -> ChorusParams {
-        let rate = self.chorus_rate.get();
-        let depth = self.chorus_depth.get();
-        let min_distance = self.chorus_distance.get();
-
-        let mix = self.chorus_mix.get();
-
-        ChorusParams {
-            rate,
-            depth,
-            min_distance,
-            mix,
-        }
-    }
-
-    fn vibrato_attack(&self) -> VibratoEnvelopeParams {
-        let attack = self.vibrato_attack.get();
-        VibratoEnvelopeParams { attack }
-    }
-
-    fn vibrato_lfo(&self, tempo: f32) -> VibratoLFOParams {
-        let speed = self.vibrato_rate.get().as_hz(tempo);
-        let amount = self.vibrato_amount.get();
-        VibratoLFOParams { speed, amount }
     }
 
     fn get(&self, index: i32) -> Option<ParameterView> {
