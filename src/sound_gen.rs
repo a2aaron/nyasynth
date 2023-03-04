@@ -406,10 +406,13 @@ impl OSCGroup {
             .osc
             .next_sample(sample_rate, shape, pitch, params.phase);
 
-        // Apply noise
-        let noise = noise_generator.next();
-        let value = value + noise * params.noise_mix;
-        // TODO: check if the noise is applied before or after the filter!
+        // Apply noise, if the noise is turned on.
+        let value = if params.noise_mix > 0.01 {
+            let noise = noise_generator.next();
+            value + noise * params.noise_mix
+        } else {
+            value
+        };
 
         // Apply filter
         let value = {
