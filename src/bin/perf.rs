@@ -20,7 +20,7 @@ use vst::event::Event as VstEvent;
 use vst::event::SysExEvent as VstSysExEvent;
 
 struct MidiBlocks<'a> {
-    event_blocks: Vec<Vec<VstEvent<'a>>>,
+    event_blocks: BTreeMap<usize, Vec<VstEvent<'a>>>,
 }
 
 impl<'a> MidiBlocks<'a> {
@@ -33,6 +33,14 @@ impl<'a> MidiBlocks<'a> {
         let events = to_vst_events(&smf, sample_rate, tempo_info);
         let event_blocks = split_blocks(events, block_size);
         MidiBlocks { event_blocks }
+    }
+
+    fn get(&self, i: usize) -> Vec<VstEvent> {
+        self.event_blocks.get(&i).unwrap_or(&vec![]).clone()
+    }
+
+    fn max_block(&self) -> usize {
+        *self.event_blocks.keys().max().unwrap_or(&0)
     }
 }
 
@@ -129,7 +137,7 @@ impl TempoInfo {
 fn split_blocks<'a>(
     events: Vec<(VstEvent<'a>, SampleTime)>,
     block_size: usize,
-) -> Vec<Vec<VstEvent<'a>>> {
+) -> BTreeMap<usize, Vec<VstEvent<'a>>> {
     let mut blocks = BTreeMap::new();
 
     for (event, samples) in events {
@@ -143,8 +151,7 @@ fn split_blocks<'a>(
         }
         block.push(event)
     }
-
-    Vec::from_iter(blocks.values().cloned())
+    blocks
 }
 
 /// Convert the tracks in a [midly::Smf] object into [VstEvent] events. Additionally, the
@@ -159,6 +166,7 @@ fn to_vst_events<'a>(
     for track in &smf.tracks {
         let mut delta_ticks = MIDITick(0);
         for track_event in track {
+            delta_ticks += track_event.delta.into();
             let vst_event = match track_event.kind {
                 midly::TrackEventKind::Midi { channel, message } => {
                     let event = to_wmidi_event(channel, message);
@@ -185,11 +193,10 @@ fn to_vst_events<'a>(
                 midly::TrackEventKind::Escape(_) => None,
                 midly::TrackEventKind::Meta(_) => None,
             };
-            if let Some(wmidi_event) = vst_event {
+            if let Some(vst_event) = vst_event {
                 let samples = tempo_info.ticks_to_samples(delta_ticks, sample_rate);
-                vst_events.push((wmidi_event, samples))
+                vst_events.push((vst_event, samples))
             }
-            delta_ticks += track_event.delta.into();
         }
     }
     // Sort by sample times.
@@ -279,15 +286,33 @@ fn to_wmidi_event(
     }
 }
 
+fn to_string(event: &vst::event::Event) -> String {
+    match event {
+        VstEvent::Midi(midi) => {
+            format!(
+                "offset: {}, {:?}",
+                midi.delta_frames,
+                wmidi::MidiMessage::try_from(&midi.data as &[u8]).unwrap()
+            )
+        }
+        VstEvent::SysEx(_) => todo!(),
+        VstEvent::Deprecated(_) => todo!(),
+    }
+}
+fn print_events<'a>(events: impl IntoIterator<Item = &'a vst::event::Event<'a>>) {
+    for event in events {
+        println!("{}", to_string(event));
+    }
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     let block_size = 1024;
     let sample_rate = SampleRate(44100.0);
 
-    let raw = std::fs::read("no name.mid")?;
+    let raw = std::fs::read("megalovania_melody.mid")?;
     let smf = midly::Smf::parse(&raw)?;
 
     let tempo_info = TempoInfo::new(&smf);
-    println!("tempo_info: {:?}", tempo_info.beats_per_minute());
     let blocks = MidiBlocks::new(smf, sample_rate, block_size, tempo_info);
 
     let host = SimpleHost::new(block_size, tempo_info.beats_per_minute());
@@ -307,8 +332,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut outputs: Vec<f32> = vec![];
 
-    for block in blocks.event_blocks {
-        // nyasynth.process_events_iter(block.iter());
+    for i in 0..(blocks.max_block() + 100) {
+        let block = blocks.get(i);
 
         let mut events_buffer = SendEventBuffer::new(64);
         events_buffer.store_events(block.iter());
