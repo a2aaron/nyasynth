@@ -1,6 +1,6 @@
 use crate::{
-    common::{self, Decibel, Hertz, SampleRate, SampleTime, Seconds, Vel},
-    ease::{ease_in_expo, lerp},
+    common::{self, Decibel, Hertz, Pitch, SampleRate, SampleTime, Seconds, Vel},
+    ease::lerp,
     neighbor_pairs::NeighborPairsIter,
     params::{EnvelopeParams, MeowParameters},
 };
@@ -391,7 +391,7 @@ impl OSCGroup {
         // signal to be inverted, which isn't what we want (instead it should
         // just have zero volume). We don't do this for the AmpMod because inverting
         // the signal allows for more interesting audio.
-        let total_volume = base_vel.0 * vol_env.get_amp().max(0.0);
+        let total_volume = base_vel.raw * vol_env.get_amp().max(0.0);
 
         let pitch_multiplier = {
             let pitch_bend_mod = pitch_bend * (params.pitchbend_max as f32);
@@ -431,14 +431,9 @@ impl OSCGroup {
             // TODO: investigate if this is correct
             let filter_env = self.filter_env.get(&params.filter_envelope, context);
 
-            // Easing sort of experimentally determined. See the following:
-            // https://www.desmos.com/calculator/grjkm7iknd
-            // https://docs.google.com/spreadsheets/d/174y4e5t8698O4-Wh9idkMVeZFb-L-7l8zLmDMGz-D-A/edit?usp=sharing
-            let base_vel_eased = ease_in_expo(base_vel.0);
-
             let cutoff_freq = common::Hertz::lerp_octave(
                 filter.cutoff_freq,
-                filter.cutoff_freq + params.filter_envelope.env_mod * base_vel_eased,
+                filter.cutoff_freq + params.filter_envelope.env_mod * base_vel.eased,
                 filter_env,
             );
 

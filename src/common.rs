@@ -3,7 +3,7 @@ use derive_more::{Add, From, Into, Sub};
 use ordered_float::OrderedFloat;
 
 use crate::{
-    ease::{lerp, Easing},
+    ease::{ease_in_expo, lerp, Easing},
     sound_gen::EnvelopeType,
 };
 
@@ -44,27 +44,27 @@ impl From<f32> for SampleRate {
 
 /// A normalized 0.0-1.0 float representation of a velocity value.
 #[derive(Debug, Clone, Copy, From)]
-pub struct Vel(pub f32);
+pub struct Vel {
+    pub raw: f32,
+    pub eased: f32,
+}
+
+impl Vel {
+    fn new(raw: f32) -> Vel {
+        // Easing sort of experimentally determined and is meant for use with the filter cutoff value.
+        // See the following:
+        // https://www.desmos.com/calculator/grjkm7iknd
+        // https://docs.google.com/spreadsheets/d/174y4e5t8698O4-Wh9idkMVeZFb-L-7l8zLmDMGz-D-A/edit?usp=sharing
+        Vel {
+            raw,
+            eased: ease_in_expo(raw),
+        }
+    }
+}
 
 impl From<wmidi::U7> for Vel {
     fn from(value: wmidi::U7) -> Self {
-        Vel(normalize_u7(value))
-    }
-}
-
-impl std::ops::Mul<f32> for Vel {
-    type Output = Vel;
-
-    fn mul(self, rhs: f32) -> Self::Output {
-        Vel(self.0 * rhs)
-    }
-}
-
-impl std::ops::Div for Vel {
-    type Output = f32;
-
-    fn div(self, rhs: Self) -> Self::Output {
-        self.0 / rhs.0
+        Vel::new(normalize_u7(value))
     }
 }
 
