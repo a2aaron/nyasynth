@@ -32,6 +32,12 @@ pub enum Easing<T> {
     Exponential { start: T, end: T },
 }
 
+impl<T> Easing<T> {
+    pub fn linear(start: T, end: T) -> Easing<T> {
+        Easing::Linear { start, end }
+    }
+}
+
 impl<T: Lerpable + InvLerpable> Easer<T> for Easing<T> {
     /// Ease using the given interpolation value `t`. `t` is expected to be in
     /// [0.0, 1.0] range.

@@ -1,6 +1,6 @@
 use vst::{plugin::PluginParameters, util::AtomicFloat};
 
-use crate::common::{Decibel, I32Divable, Seconds};
+use crate::common::{Decibel, Seconds};
 use crate::common::{FilterType, Hertz};
 use crate::ease::{Easer, Easing};
 use crate::sound_gen::NoteShape;
@@ -56,7 +56,7 @@ const DEFAULT_PHASE: f32 = 0.0;
 
 const DEFAULT_NOISE_MIX: f32 = 0.0;
 
-const DEFAULT_PITCHBEND: I32Divable = I32Divable(12); // +12 semis
+const DEFAULT_PITCHBEND: u8 = 12; // +12 semis
 const DEFAULT_PORTAMENTO: Seconds = Seconds::new(120.0 / 1000.0);
 const DEFAULT_POLYCAT: f32 = 0.0; // Off
 
@@ -70,7 +70,7 @@ pub struct MeowParameters {
     pub phase: f32,
     pub noise_mix: f32,
     pub portamento_time: Seconds,
-    pub pitchbend_max: usize,
+    pub pitchbend_max: u8,
     pub polycat: bool,
     pub vol_envelope: VolumeEnvelopeParams,
     pub filter: FilterParams,
@@ -120,6 +120,9 @@ impl MeowParameters {
     }
 }
 
+// This deny is triggered if you have a field that isn't read from. The places that you probably need
+// to add code are in Parameters::get() and also a corresponding field in MeowParameters.
+#[deny(dead_code)]
 pub struct Parameters {
     // Public parameters (exposed in UI)
     meow_attack: Parameter<Seconds>,
@@ -132,7 +135,7 @@ pub struct Parameters {
     portamento_time: Parameter<Seconds>,
     noise_mix: Parameter<f32>,
     chorus_mix: Parameter<f32>,
-    pitch_bend: Parameter<I32Divable>,
+    pitch_bend: Parameter<u8>,
     polycat: Parameter<f32>,
     // Internal parameter (not exposed by the original Meowsynth)
     gain: Parameter<Decibel>,
@@ -152,8 +155,8 @@ pub struct Parameters {
 
 impl Parameters {
     // 12 public parameters, plus 10 internal parameters
-    // (plus one debug parameter)
-    pub const NUM_PARAMS: usize = 12 + 10 + 2;
+    // (plus two debug parameters)
+    pub const NUM_PARAMS: u8 = 12 + 10 + 2;
 
     pub fn new() -> Parameters {
         fn filter_type_formatter(value: FilterType) -> (String, String) {
@@ -181,8 +184,8 @@ impl Parameters {
             (value.to_string(), "".to_string())
         }
 
-        fn semitone_formatter(value: I32Divable) -> (String, String) {
-            (format!("{}", value.0), "semis".to_string())
+        fn semitone_formatter(value: u8) -> (String, String) {
+            (format!("{}", value), "semis".to_string())
         }
 
         fn polycat_formatter(value: f32) -> (String, String) {
@@ -211,32 +214,15 @@ impl Parameters {
 
         let meow_sustain = Decibel::ease_db(-24.0, 0.0);
 
-        let pitch_bend = Easing::SteppedLinear {
-            start: I32Divable(1),
-            end: I32Divable(12),
-            steps: 13,
-        };
-        let polycat = Easing::Linear {
-            start: 0.0,
-            end: 1.0,
-        };
+        let polycat = Easing::linear(0.0, 1.0);
         let gain = Decibel::ease_db(-36.0, 12.0);
         let filter_envelope_mod = Hertz::ease_exp(0.0, 22100.0);
         let filter_cutoff_freq = Hertz::ease_exp(20.0, 22100.0);
-        let filter_q = Easing::Linear {
-            start: 0.01,
-            end: 10.0,
-        };
+        let filter_q = Easing::linear(0.01, 10.0);
 
         let chorus_rate = Hertz::ease_exp(0.1, 10.0);
-        let chorus_depth = Easing::Linear {
-            start: 0.0,
-            end: MAX_CHORUS_DEPTH,
-        };
-        let chorus_distance = Easing::Linear {
-            start: 0.0,
-            end: MAX_CHORUS_DISTANCE,
-        };
+        let chorus_depth = Easing::linear(0.0, MAX_CHORUS_DEPTH);
+        let chorus_distance = Easing::linear(0.0, MAX_CHORUS_DISTANCE);
 
         Parameters {
             meow_attack: Parameter::time("Meow Attack", DEFAULT_MEOW_ATTACK, 0.001, 10.0),
@@ -257,7 +243,7 @@ impl Parameters {
             pitch_bend: Parameter::new(
                 "Pitchbend",
                 DEFAULT_PITCHBEND,
-                pitch_bend,
+                [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
                 semitone_formatter,
             ),
             polycat: Parameter::new("Polycat", DEFAULT_POLYCAT, polycat, polycat_formatter),
@@ -326,8 +312,8 @@ impl Parameters {
         self.portamento_time.get()
     }
 
-    fn pitchbend_max(&self) -> usize {
-        self.pitch_bend.get().0 as usize
+    fn pitchbend_max(&self) -> u8 {
+        self.pitch_bend.get()
     }
 
     fn polycat(&self) -> bool {
@@ -403,7 +389,9 @@ impl Parameters {
     }
 
     fn get(&self, index: i32) -> Option<ParameterView> {
-        let view = match index as usize {
+        // This deny makes it a compile time error if the NUM_PARAMS value is incorrect
+        #[deny(unreachable_patterns)]
+        let view = match index as u8 {
             0 => self.meow_attack.view(),
             1 => self.meow_decay.view(),
             2 => self.meow_sustain.view(),
@@ -428,7 +416,12 @@ impl Parameters {
             21 => self.gain.view(),
             22 => self.vibrato_note_shape.view(),
             23 => self.chorus_note_shape.view(),
-            Parameters::NUM_PARAMS | _ => return None,
+            // This branch is unreachable if NUM_PARAMS is too low (which normally issues an
+            // unreachable warning, but will be a hard error due to the deny above).
+            Parameters::NUM_PARAMS => return None,
+            // This branch does not fully cover all values if NUM_PARAMS is too high (which issues
+            // an error).
+            Parameters::NUM_PARAMS..=u8::MAX => return None,
         };
         Some(view)
     }

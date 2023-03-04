@@ -339,34 +339,6 @@ impl std::ops::Div<Decibel> for Decibel {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Add, Sub, From, Into)]
-/// An i32 which implements Lerpable (that is, can be multiplied by an f32). This is intended for
-/// parameters such as Coarse Tune, which typically snap to the nearest whole number (ex: can only
-/// take on integer values like "+2 semis").
-pub struct I32Divable(pub i32);
-
-impl I32Divable {
-    pub const fn new(x: i32) -> I32Divable {
-        I32Divable(x)
-    }
-}
-
-impl std::ops::Div<Self> for I32Divable {
-    type Output = f32;
-
-    fn div(self, rhs: Self) -> Self::Output {
-        (self.0 as f32) / (rhs.0 as f32)
-    }
-}
-
-impl std::ops::Mul<f32> for I32Divable {
-    type Output = Self;
-
-    fn mul(self, rhs: f32) -> Self::Output {
-        I32Divable(((self.0 as f32) * rhs) as i32)
-    }
-}
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum FilterType {
     SinglePoleLowPass,
