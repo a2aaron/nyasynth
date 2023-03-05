@@ -266,8 +266,7 @@ impl SoundGenerator {
             self.get_note_context(sample_rate),
             noise_generator,
             self.vel,
-            self.get_current_pitch(sample_rate, params.portamento_time)
-                .into_hertz(),
+            self.get_current_pitch(sample_rate, params.portamento_time),
             pitch_bend,
             vibrato_mod,
         );
@@ -376,7 +375,7 @@ impl OSCGroup {
     /// as well.
     /// base_vel - The velocity of the note. This is affected by volume
     ///            modulation. This is a 0.0-1.0 normalized value.
-    /// base_note - The base pitch, in Hz, of the note
+    /// base_note - The base pitch of the note
     /// pitch_bend - A [-1.0, 1.0] range value
     /// (mod_type, modulation) - Indicates what modulation type, if any, to
     ///                          apply to the signal. This is from OSC 2
@@ -390,7 +389,7 @@ impl OSCGroup {
         context: NoteContext,
         noise_generator: &mut NoiseGenerator,
         base_vel: Vel,
-        base_note: Hertz,
+        base_note: Pitch,
         pitch_bend: f32,
         vibrato_mod: f32,
     ) -> f32 {
@@ -406,7 +405,7 @@ impl OSCGroup {
         // the signal allows for more interesting audio.
         let total_volume = base_vel.raw * vol_env.get_amp().max(0.0);
 
-        let pitch_multiplier = {
+        let pitch_mod = {
             let pitch_bend_mod = pitch_bend * (params.pitchbend_max as f32);
 
             // Both vibrato_mod and vibrato_env are in the 0.0-1.0 range. We multiply by two here to
@@ -416,12 +415,13 @@ impl OSCGroup {
 
             // Given any note, the note a single semitone away is 2^1/12 times the original note
             // So (2^1/12)^n = 2^(n/12) is n semitones away.
-            // We take an exponential here because frequency is exponential with respect
-            // to note value
-            2.0f32.powf((vibrato_mod + pitch_bend_mod) / 12.0)
+            Pitch((vibrato_mod + pitch_bend_mod) / 12.0)
         };
 
-        let pitch = base_note * pitch_multiplier;
+        // Note that we can just add these values together. This is because base_note and pitch_mod
+        // are in the same linear space (specifically: +1.0 maps to one octave, which happens because
+        // converting to and from Hertz uses exp2 and log2).
+        let pitch = (base_note + pitch_mod).into_hertz();
 
         let shape = NoteShape::Sawtooth;
 
