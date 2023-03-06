@@ -1,5 +1,5 @@
 use crate::{
-    common::{Decibel, Hertz, Pitch, SampleRate, SampleTime, Seconds, Vel},
+    common::{Hertz, Pitch, SampleRate, SampleTime, Seconds, Vel},
     ease::lerp,
     neighbor_pairs::NeighborPairsIter,
     params::{EnvelopeParams, MeowParameters},
