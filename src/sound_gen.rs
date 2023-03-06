@@ -345,7 +345,7 @@ impl SoundGenerator {
 #[derive(Debug)]
 struct OSCGroup {
     osc: Oscillator,
-    vol_env: Envelope<Decibel>,
+    vol_env: Envelope<f32>,
     vibrato_env: Envelope<f32>,
     // The state for the EQ/filters, applied after the signal is generated
     filter: DirectForm1<f32>,
@@ -356,7 +356,7 @@ impl OSCGroup {
     fn new(sample_rate: SampleRate) -> OSCGroup {
         OSCGroup {
             osc: Oscillator::new(),
-            vol_env: Envelope::<Decibel>::new(),
+            vol_env: Envelope::<f32>::new(),
             vibrato_env: Envelope::<f32>::new(),
             filter_env: Envelope::<f32>::new(),
             filter: DirectForm1::<f32>::new(
@@ -396,14 +396,13 @@ impl OSCGroup {
         let sample_rate = context.sample_rate;
 
         // Compute volume from parameters
-        let vol_env = self.vol_env.get(&params.vol_envelope, context);
-
-        // Apply parameter, ADSR, LFO, and AmpMod for total volume
-        // We clamp the LFO to positive values because negative values cause the
-        // signal to be inverted, which isn't what we want (instead it should
-        // just have zero volume). We don't do this for the AmpMod because inverting
-        // the signal allows for more interesting audio.
-        let total_volume = base_vel.raw * vol_env.get_amp().max(0.0);
+        let vol_env = {
+            // Easing computed somewhat empirically.
+            // See https://www.desmos.com/calculator/r7k5ee8k5j for details.
+            let x = self.vol_env.get(&params.vol_envelope, context);
+            (x * x * x + x) / 2.0
+        };
+        let total_volume = base_vel.raw * vol_env.max(0.0);
 
         let pitch_mod = {
             let pitch_bend_mod = pitch_bend * (params.pitchbend_max as f32);

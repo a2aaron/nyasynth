@@ -7,6 +7,7 @@ use std::{
 
 use clap::Parser;
 use derive_more::{Add, AddAssign, From, Into, Sub, SubAssign};
+use nyasynth::ease::{Easer, Easing};
 use nyasynth::{
     self,
     common::{SampleRate, SampleTime},
@@ -323,21 +324,35 @@ fn main() -> Result<(), Box<dyn Error>> {
     nyasynth.set_block_size(block_size as i64);
 
     nyasynth.resume();
-    nyasynth
-        .get_parameter_object()
-        .set_parameter(11, if args.polycat { 1.0 } else { 0.0 });
+
+    let params = nyasynth.get_parameter_object();
+    params.set_parameter(11, if args.polycat { 1.0 } else { 0.0 });
+
+    // Set decay and release parameters
+    let decay_secs = Easing::Exponential {
+        start: 0.001,
+        end: 5.0,
+    }
+    .inv_ease(0.5);
+    let release_secs = Easing::Exponential {
+        start: 0.001,
+        end: 4.0,
+    }
+    .inv_ease(40.0 / 1000.0);
+    params.set_parameter(1, decay_secs); // about 0.5s
+    params.set_parameter(3, release_secs); // about 40ms
 
     // Set noise on.
-    // nyasynth.get_parameter_object().set_parameter(8, 1.0);
+    // params.set_parameter(8, 1.0);
 
     // Set vibrato amount
-    // nyasynth.get_parameter_object().set_parameter(4, 1.0);
+    // params.set_parameter(4, 1.0);
 
     // Set vibrato rate
-    // nyasynth.get_parameter_object().set_parameter(6, 0.5);
+    // params.set_parameter(6, 0.5);
 
     // Set chorus amount
-    // nyasynth.get_parameter_object().set_parameter(9, 0.5);
+    // params.set_parameter(9, 0.5);
 
     let mut outputs: Vec<f32> = Vec::with_capacity(8_000_000);
 

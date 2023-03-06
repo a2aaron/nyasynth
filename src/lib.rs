@@ -6,7 +6,7 @@ extern crate vst;
 
 mod chorus;
 pub mod common;
-mod ease;
+pub mod ease;
 mod keys;
 mod neighbor_pairs;
 mod params;

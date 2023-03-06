@@ -125,7 +125,7 @@ impl MeowParameters {
             vol_envelope: VolumeEnvelopeParams {
                 attack: meow_attack.get(),
                 decay: meow_decay.get(),
-                sustain: meow_sustain.get(),
+                sustain: meow_sustain.get_raw(),
                 release: meow_release.get(),
             },
             filter: FilterParams {
@@ -584,11 +584,11 @@ pub trait EnvelopeParams<T> {
 pub struct VolumeEnvelopeParams {
     attack: Seconds,
     decay: Seconds,
-    sustain: Decibel,
+    sustain: f32,
     release: Seconds,
 }
 
-impl EnvelopeParams<Decibel> for VolumeEnvelopeParams {
+impl EnvelopeParams<f32> for VolumeEnvelopeParams {
     fn attack(&self) -> Seconds {
         self.attack
     }
@@ -601,7 +601,7 @@ impl EnvelopeParams<Decibel> for VolumeEnvelopeParams {
         self.decay
     }
 
-    fn sustain(&self) -> Decibel {
+    fn sustain(&self) -> f32 {
         self.sustain
     }
 
