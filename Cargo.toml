@@ -7,7 +7,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-vst = "0.3.0"
+nih_plug = { git = "https://github.com/robbert-vdh/nih-plug" }
 wmidi = "4.0.1"
 log = "0.4.17"
 simple-logging = "2.0.2"

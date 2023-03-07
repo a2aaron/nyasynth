@@ -1,4 +1,4 @@
-use vst::{plugin::PluginParameters, util::AtomicFloat};
+use nih_plug::prelude::Params;
 
 use crate::common::{Decibel, Seconds};
 use crate::common::{FilterType, Hertz};
@@ -163,6 +163,7 @@ impl MeowParameters {
 // This deny is triggered if you have a field that isn't read from. The places that you probably need
 // to add code are in Parameters::get() and also a corresponding field in MeowParameters.
 #[deny(dead_code)]
+#[derive(Params)]
 pub struct Parameters {
     // Public parameters (exposed in UI)
     meow_attack: Parameter<Seconds>,
@@ -371,61 +372,6 @@ impl Parameters {
             Parameters::NUM_PARAMS..=u8::MAX => return None,
         };
         Some(view)
-    }
-}
-
-impl PluginParameters for Parameters {
-    fn get_parameter_label(&self, index: i32) -> String {
-        if let Some(parameter) = self.get(index) {
-            parameter.text_unit
-        } else {
-            "".to_string()
-        }
-    }
-
-    fn get_parameter_text(&self, index: i32) -> String {
-        if let Some(parameter) = self.get(index) {
-            parameter.text_value
-        } else {
-            "".to_string()
-        }
-    }
-
-    fn get_parameter_name(&self, index: i32) -> String {
-        if let Some(parameter) = self.get(index) {
-            parameter.name.to_string()
-        } else {
-            "".to_string()
-        }
-    }
-
-    fn get_parameter(&self, index: i32) -> f32 {
-        if let Some(parameter) = self.get(index) {
-            parameter.get()
-        } else {
-            0.0
-        }
-    }
-
-    fn set_parameter(&self, index: i32, value: f32) {
-        if let Some(parameter) = self.get(index) {
-            // This is needed because some VST hosts, such as Ableton, echo a
-            // parameter change back to the plugin. This causes issues such as
-            // weird knob behavior where the knob "flickers" because the user tries
-            // to change the knob value, but ableton keeps sending back old, echoed
-            // values.
-            #[allow(clippy::float_cmp)]
-            if parameter.get() == value {
-                return;
-            }
-            parameter.set(value)
-        } else {
-            log::error!(
-                "Cannot set value for parameter index {} (expected value in range 0 to {})",
-                index,
-                Parameters::NUM_PARAMS
-            )
-        }
     }
 }
 

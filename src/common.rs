@@ -1,5 +1,6 @@
 use biquad::ToHertz;
 use derive_more::{Add, From, Into, Sub};
+use nih_plug::util::midi_note_to_freq;
 use ordered_float::OrderedFloat;
 
 use crate::{
@@ -50,7 +51,7 @@ pub struct Vel {
 }
 
 impl Vel {
-    fn new(raw: f32) -> Vel {
+    pub fn new(raw: f32) -> Vel {
         // Easing sort of experimentally determined and is meant for use with the filter cutoff value.
         // See the following:
         // https://www.desmos.com/calculator/grjkm7iknd
@@ -136,18 +137,22 @@ impl From<f32> for Seconds {
     }
 }
 
+/// A MIDI note
+#[derive(Debug, Clone, Copy, PartialEq, From, Into)]
+pub struct Note(pub u8);
+
 /// A struct representing linear pitch space. This exists so that portamento and filter cutoff
 /// sweep do not need to recompute their start and end frequencies every sample.
 #[derive(Debug, Clone, Copy, PartialEq, Add, Sub, From, Into)]
 pub struct Pitch(pub f32);
 
 impl Pitch {
-    pub fn from_note(value: wmidi::Note) -> Self {
-        Pitch(value.to_freq_f32().log2())
+    pub fn from_note(note: Note) -> Self {
+        Pitch(midi_note_to_freq(note.0).log2())
     }
 
-    pub fn from_hertz(value: Hertz) -> Self {
-        Pitch(value.get().log2())
+    pub fn from_hertz(hertz: Hertz) -> Self {
+        Pitch(hertz.get().log2())
     }
 
     pub fn into_hertz(&self) -> Hertz {

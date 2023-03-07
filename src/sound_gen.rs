@@ -1,5 +1,5 @@
 use crate::{
-    common::{Hertz, Pitch, SampleRate, SampleTime, Seconds, Vel},
+    common::{Hertz, Note, Pitch, SampleRate, SampleTime, Seconds, Vel},
     ease::lerp,
     neighbor_pairs::NeighborPairsIter,
     params::{EnvelopeParams, MeowParameters},
@@ -114,7 +114,7 @@ impl EnvelopeType for f32 {
 #[derive(Debug)]
 pub struct SoundGenerator {
     osc_1: OSCGroup,
-    pub note: wmidi::Note,
+    pub note: Note,
     // The ending pitch from which portamento ends up at. This and `start_pitch` are unaffected by
     // by pitch bend and pitch modifiers.
     end_pitch: Pitch,
@@ -145,7 +145,7 @@ pub struct SoundGenerator {
 impl SoundGenerator {
     pub fn new(
         params: &MeowParameters,
-        note: wmidi::Note,
+        note: Note,
         vel: Vel,
         sample_rate: SampleRate,
     ) -> SoundGenerator {
@@ -274,7 +274,7 @@ impl SoundGenerator {
         (osc_1, osc_1)
     }
 
-    pub fn note_on(&mut self, frame_delta: i32, vel: Vel, bend_note: Option<wmidi::Note>) {
+    pub fn note_on(&mut self, frame_delta: i32, vel: Vel, bend_note: Option<Note>) {
         let start_pitch = bend_note.map(Pitch::from_note);
         let note_on = NoteOnEvent::new(self.note, vel, start_pitch);
         self.next_note_on = Some((frame_delta as usize, note_on));
@@ -298,7 +298,7 @@ impl SoundGenerator {
         sample_rate: SampleRate,
         portamento_time: Seconds,
         bend_from_current: bool,
-        new_note: wmidi::Note,
+        new_note: Note,
         new_vel: Vel,
         frame_delta: i32,
     ) {
@@ -571,13 +571,13 @@ struct NoteContext {
 #[derive(Debug, Clone, Copy)]
 struct NoteOnEvent {
     vel: Vel,
-    note: wmidi::Note,
+    note: Note,
     start_pitch: Pitch,
     end_pitch: Pitch,
 }
 
 impl NoteOnEvent {
-    fn new(note: wmidi::Note, vel: Vel, start_pitch: Option<Pitch>) -> NoteOnEvent {
+    fn new(note: Note, vel: Vel, start_pitch: Option<Pitch>) -> NoteOnEvent {
         let end_pitch = Pitch::from_note(note);
         let start_pitch = start_pitch.unwrap_or(end_pitch);
         NoteOnEvent {

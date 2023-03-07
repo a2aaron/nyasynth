@@ -1,6 +1,4 @@
-use wmidi::Note;
-
-use crate::common::Vel;
+use crate::common::{Note, Vel};
 
 pub struct KeyTracker {
     /// A list of the currently held keys.
