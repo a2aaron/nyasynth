@@ -1,32 +1,14 @@
-use nih_plug::prelude::Params;
+use std::sync::Arc;
 
-use crate::common::{Decibel, Seconds};
-use crate::common::{FilterType, Hertz};
-use crate::ease::{Easer, Easing};
-use crate::sound_gen::NoteShape;
-
-const IDENTITY: Easing<f32> = Easing::Linear {
-    start: 0.0,
-    end: 1.0,
+use nih_plug::prelude::{
+    BoolParam, Enum, EnumParam, FloatParam, FloatRange, IntParam, IntRange, Params,
 };
 
-const FILTER_TYPES: [FilterType; 4] = [
-    FilterType::LowPass,
-    FilterType::HighPass,
-    FilterType::BandPass,
-    FilterType::Notch,
-];
+use crate::common::{self, Decibel, Seconds};
+use crate::common::{FilterType, Hertz};
+use crate::sound_gen::NoteShape;
 
-const VIBRATO_RATES: [VibratoRate; 8] = [
-    VibratoRate::FourBar,
-    VibratoRate::TwoBar,
-    VibratoRate::OneBar,
-    VibratoRate::Half,
-    VibratoRate::Quarter,
-    VibratoRate::Eighth,
-    VibratoRate::Twelfth,
-    VibratoRate::Sixteenth,
-];
+const IDENTITY: FloatRange = FloatRange::Linear { min: 0.0, max: 1.0 };
 
 // Default values for master volume
 const DEFAULT_MASTER_VOL: Decibel = Decibel::from_db(-6.0);
@@ -87,6 +69,18 @@ impl MeowParameters {
     /// so avoid calling it too often (once per block, or ideally only once every time a parameter
     /// updates).
     pub fn new(parameters: &Parameters, tempo: f32) -> MeowParameters {
+        fn seconds(param: &FloatParam) -> Seconds {
+            Seconds::from(param.value())
+        }
+
+        fn hertz(param: &FloatParam) -> Hertz {
+            Hertz::from(param.value())
+        }
+
+        fn decibel(param: &FloatParam) -> Decibel {
+            Decibel::from_db(param.value())
+        }
+
         // This exhaustive destructuring helps ensure that if you add a field to Parameters, that you
         // also need to add a field to MeowParameters.
         let Parameters {
@@ -116,46 +110,46 @@ impl MeowParameters {
             chorus_note_shape,
         } = parameters;
         MeowParameters {
-            master_vol: gain.get(),
-            phase: phase.get(),
-            noise_mix: noise_mix.get(),
-            portamento_time: portamento_time.get(),
-            pitchbend_max: pitch_bend.get(),
-            polycat: polycat.get(),
+            master_vol: decibel(gain),
+            phase: phase.value(),
+            noise_mix: noise_mix.value(),
+            portamento_time: seconds(portamento_time),
+            pitchbend_max: pitch_bend.value() as u8,
+            polycat: polycat.value(),
             vol_envelope: VolumeEnvelopeParams {
-                attack: meow_attack.get(),
-                decay: meow_decay.get(),
-                sustain: meow_sustain.get_raw(),
-                release: meow_release.get(),
+                attack: seconds(meow_attack),
+                decay: seconds(meow_decay),
+                sustain: meow_sustain.value(),
+                release: seconds(meow_release),
             },
             filter: FilterParams {
-                cutoff_freq: filter_cutoff_freq.get(),
-                q_value: filter_q.get(),
-                filter_type: filter_type.get().into(),
-                dry_wet: filter_dry_wet.get(),
+                cutoff_freq: hertz(filter_cutoff_freq),
+                q_value: filter_q.value(),
+                filter_type: filter_type.value().into(),
+                dry_wet: filter_dry_wet.value(),
             },
             filter_envelope: FilterEnvelopeParams {
-                attack: meow_attack.get(),
-                decay: meow_decay.get(),
-                sustain: meow_sustain.get_raw(),
-                release: meow_release.get(),
-                env_mod: filter_envlope_mod.get(),
+                attack: seconds(meow_attack),
+                decay: seconds(meow_decay),
+                sustain: meow_sustain.value(),
+                release: seconds(meow_release),
+                env_mod: hertz(filter_envlope_mod),
             },
             chorus: ChorusParams {
-                rate: chorus_rate.get(),
-                depth: chorus_depth.get(),
-                min_distance: chorus_distance.get(),
-                mix: chorus_mix.get(),
+                rate: Hertz(chorus_rate.value()),
+                depth: chorus_depth.value(),
+                min_distance: chorus_distance.value(),
+                mix: chorus_mix.value(),
             },
             vibrato_attack: VibratoEnvelopeParams {
-                attack: vibrato_attack.get(),
+                attack: Seconds::from(vibrato_attack.value()),
             },
             vibrato_lfo: VibratoLFOParams {
-                speed: vibrato_rate.get().as_hz(tempo),
-                amount: vibrato_amount.get(),
+                speed: vibrato_rate.value().as_hz(tempo),
+                amount: vibrato_amount.value(),
             },
-            vibrato_note_shape: vibrato_note_shape.get(),
-            chorus_note_shape: chorus_note_shape.get(),
+            vibrato_note_shape: vibrato_note_shape.value(),
+            chorus_note_shape: chorus_note_shape.value(),
         }
     }
 }
@@ -166,331 +160,206 @@ impl MeowParameters {
 #[derive(Params)]
 pub struct Parameters {
     // Public parameters (exposed in UI)
-    meow_attack: Parameter<Seconds>,
-    meow_decay: Parameter<Seconds>,
-    meow_sustain: Parameter<Decibel>,
-    meow_release: Parameter<Seconds>,
-    vibrato_amount: Parameter<f32>,
-    vibrato_attack: Parameter<Seconds>,
-    vibrato_rate: Parameter<VibratoRate>,
-    portamento_time: Parameter<Seconds>,
-    noise_mix: Parameter<f32>,
-    chorus_mix: Parameter<f32>,
-    pitch_bend: Parameter<u8>,
-    polycat: Parameter<bool>,
+    #[id = "meow_attack"]
+    meow_attack: FloatParam, // Parameter<Seconds>,
+    #[id = "meow_decay"]
+    meow_decay: FloatParam, // Parameter<Seconds>,
+    #[id = "meow_sustain"]
+    meow_sustain: FloatParam, // Parameter<Decibel>,
+    #[id = "meow_release"]
+    meow_release: FloatParam, // Parameter<Seconds>,
+    #[id = "vibrato_amount"]
+    vibrato_amount: FloatParam, // Parameter<f32>,
+    #[id = "vibrato_attack"]
+    vibrato_attack: FloatParam, // Parameter<Seconds>,
+    #[id = "vibrato_rate"]
+    vibrato_rate: EnumParam<VibratoRate>, // Parameter<VibratoRate>,
+    #[id = "portamento_time"]
+    portamento_time: FloatParam, // Parameter<Seconds>,
+    #[id = "noise_mix"]
+    noise_mix: FloatParam, // Parameter<f32>,
+    #[id = "chorus_mix"]
+    chorus_mix: FloatParam, // Parameter<f32>,
+    #[id = "pitch_bend"]
+    pitch_bend: IntParam, // Parameter<u8>,
+    #[id = "polycat"]
+    polycat: BoolParam, // Parameter<bool>,
     // Internal parameter (not exposed by the original Meowsynth)
-    gain: Parameter<Decibel>,
-    filter_envlope_mod: Parameter<Hertz>,
-    filter_dry_wet: Parameter<f32>,
-    filter_q: Parameter<f32>,
-    filter_type: Parameter<FilterType>,
-    filter_cutoff_freq: Parameter<Hertz>,
-    chorus_depth: Parameter<f32>,
-    chorus_distance: Parameter<f32>,
-    chorus_rate: Parameter<Hertz>,
-    phase: Parameter<f32>,
+    #[id = "gain"]
+    gain: FloatParam, // Parameter<Decibel>,
+    #[id = "filter_envlope_mod"]
+    filter_envlope_mod: FloatParam, // Parameter<Hertz>,
+    #[id = "filter_dry_wet"]
+    filter_dry_wet: FloatParam, // Parameter<f32>,
+    #[id = "filter_q"]
+    filter_q: FloatParam, // Parameter<f32>,
+    #[id = "filter_type"]
+    filter_type: EnumParam<FilterType>, // Parameter<FilterType>,
+    #[id = "filter_cutoff_freq"]
+    filter_cutoff_freq: FloatParam, // Parameter<Hertz>,
+    #[id = "chorus_depth"]
+    chorus_depth: FloatParam, // Parameter<f32>,
+    #[id = "chorus_distance"]
+    chorus_distance: FloatParam, // Parameter<f32>,
+    #[id = "chorus_rate"]
+    chorus_rate: FloatParam, // Parameter<Hertz>,
+    #[id = "phase"]
+    phase: FloatParam, // Parameter<f32>,
     // "Debug" parameters (these might become not "debug" pretty soon)
-    vibrato_note_shape: Parameter<NoteShape>,
-    chorus_note_shape: Parameter<NoteShape>,
+    #[id = "vibrato_note_shape"]
+    vibrato_note_shape: EnumParam<NoteShape>, // Parameter<NoteShape>,
+    #[id = "chorus_note_shape"]
+    chorus_note_shape: EnumParam<NoteShape>, // Parameter<NoteShape>,
+}
+
+impl Default for Parameters {
+    fn default() -> Self {
+        Parameters::new()
+    }
 }
 
 impl Parameters {
-    // 12 public parameters, plus 10 internal parameters
-    // (plus two debug parameters)
-    pub const NUM_PARAMS: u8 = 12 + 10 + 2;
-
     pub fn new() -> Parameters {
-        fn filter_type_formatter(value: FilterType) -> (String, String) {
-            let value = match value {
-                FilterType::SinglePoleLowPass => "Low Pass (Single Pole)",
-                FilterType::LowPass => "Low Pass",
-                FilterType::HighPass => "High Pass",
-                FilterType::BandPass => "Band Pass",
-                FilterType::Notch => "Notch",
-            };
-            (value.to_string(), "".to_string())
-        }
-
-        fn vibrato_formatter(value: VibratoRate) -> (String, String) {
-            let value = match value {
-                VibratoRate::FourBar => "4 bars",
-                VibratoRate::TwoBar => "2 bars",
-                VibratoRate::OneBar => "1 bars",
-                VibratoRate::Half => "1/2",
-                VibratoRate::Quarter => "1/4",
-                VibratoRate::Eighth => "1/8",
-                VibratoRate::Twelfth => "1/12",
-                VibratoRate::Sixteenth => "1/16",
-            };
-            (value.to_string(), "".to_string())
-        }
-
-        fn semitone_formatter(value: u8) -> (String, String) {
-            (format!("{}", value), "semis".to_string())
-        }
-
-        fn polycat_formatter(value: bool) -> (String, String) {
+        fn polycat_formatter(value: bool) -> String {
             if value {
-                ("Off".to_string(), "".to_string())
+                "Off".to_string()
             } else {
-                ("On".to_string(), "".to_string())
+                "On".to_string()
             }
         }
 
-        fn angle_formatter(value: f32) -> (String, String) {
-            (format!("{:.2}", value * 360.0), "deg".to_string())
+        fn angle_formatter(value: f32) -> String {
+            format!("{:.2}", value * 360.0)
         }
 
-        fn unitless_formatter(value: f32) -> (String, String) {
-            (format!("{:.3}", value), "".to_string())
-        }
-
-        fn note_shape_formatter(note_shape: NoteShape) -> (String, String) {
-            match note_shape {
-                NoteShape::Sine => ("Sine".to_string(), "".to_string()),
-                NoteShape::Sawtooth => ("Sawtooth".to_string(), "".to_string()),
-                NoteShape::Triangle(_) => ("Triangle".to_string(), "".to_string()),
+        fn time(name: &'static str, default: Seconds, min: f32, max: f32) -> FloatParam {
+            fn formatter(value: f32) -> String {
+                if value < 1.0 {
+                    format!("{:.1} ms", value * 1000.0)
+                } else {
+                    format!("{:.2} sec", value)
+                }
             }
+
+            let range = FloatRange::Skewed {
+                min,
+                max,
+                factor: 6.0,
+            };
+            FloatParam::new(name, default.get(), range).with_value_to_string(Arc::new(formatter))
         }
 
-        let meow_sustain = Decibel::ease_db(-24.0, 0.0);
+        fn decibel(name: &'static str, default: Decibel, min: f32, max: f32) -> FloatParam {
+            fn formatter(decibel: f32) -> String {
+                if decibel <= Decibel::NEG_INF_DB_THRESHOLD {
+                    "-inf".to_string()
+                } else if decibel < 0.0 {
+                    format!("{:.2}", decibel)
+                } else {
+                    format!("+{:.2}", decibel)
+                }
+            }
 
-        let gain = Decibel::ease_db(-36.0, 12.0);
+            let range = FloatRange::Skewed {
+                min,
+                max,
+                factor: FloatRange::gain_skew_factor(min, max),
+            };
+            FloatParam::new(name, default.get_db(), range)
+                .with_unit(" db")
+                .with_value_to_string(Arc::new(formatter))
+        }
+
+        fn percent(name: &'static str, default: f32) -> FloatParam {
+            fn formatter(percent: f32) -> String {
+                format!("{:.1}", percent * 100.0)
+            }
+            let range = FloatRange::Linear { min: 0.0, max: 1.0 };
+            FloatParam::new(name, default, range)
+                .with_unit(" %")
+                .with_value_to_string(Arc::new(formatter))
+        }
+
+        pub fn freq(name: &'static str, default: Hertz, range: FloatRange) -> FloatParam {
+            fn formatter(hz: f32) -> String {
+                if hz < 1000.0 {
+                    format!("{:.2} Hz", hz)
+                } else {
+                    format!("{:.2} kHz", hz / 1000.0)
+                }
+            }
+            FloatParam::new(name, default.get(), range).with_value_to_string(Arc::new(formatter))
+        }
+
         let filter_envelope_mod = Hertz::ease_exp(0.0, 22100.0);
         let filter_cutoff_freq = Hertz::ease_exp(20.0, 22100.0);
-        let filter_q = Easing::linear(0.01, 10.0);
+        let filter_q = common::ease_linear(0.01, 10.0);
 
         let chorus_rate = Hertz::ease_exp(0.1, 10.0);
-        let chorus_depth = Easing::linear(0.0, MAX_CHORUS_DEPTH);
-        let chorus_distance = Easing::linear(0.0, MAX_CHORUS_DISTANCE);
+        let chorus_depth = common::ease_linear(0.0, MAX_CHORUS_DEPTH);
+        let chorus_distance = common::ease_linear(0.0, MAX_CHORUS_DISTANCE);
 
         Parameters {
-            meow_attack: Parameter::time("Meow Attack", DEFAULT_MEOW_ATTACK, 0.001, 10.0),
-            meow_decay: Parameter::time("Meow Decay", DEFAULT_MEOW_DECAY, 0.001, 5.0),
-            meow_sustain: Parameter::decibel("Meow Sustain", DEFAULT_MEOW_SUSTAIN, meow_sustain),
-            meow_release: Parameter::time("Meow Release", DEFAULT_MEOW_RELEASE, 0.001, 4.0),
-            vibrato_amount: Parameter::percent("Vibrato Amount", DEFAULT_VIBRATO_AMOUNT),
-            vibrato_attack: Parameter::time("Vibrato Attack", DEFAULT_VIBRATO_ATTACK, 0.001, 5.0),
-            vibrato_rate: Parameter::new(
-                "Vibrato Rate",
-                DEFAULT_VIBRATO_RATE,
-                VIBRATO_RATES,
-                vibrato_formatter,
-            ),
-            portamento_time: Parameter::time("Portamento", DEFAULT_PORTAMENTO, 0.0001, 5.0),
-            noise_mix: Parameter::percent("Noise", DEFAULT_NOISE_MIX),
-            chorus_mix: Parameter::percent("Chorus", DEFAULT_CHORUS_MIX),
-            pitch_bend: Parameter::new(
+            meow_attack: time("Meow Attack", DEFAULT_MEOW_ATTACK, 0.001, 10.0),
+            meow_decay: time("Meow Decay", DEFAULT_MEOW_DECAY, 0.001, 5.0),
+            meow_sustain: decibel("Meow Sustain", DEFAULT_MEOW_SUSTAIN, -24.0, 0.0),
+            meow_release: time("Meow Release", DEFAULT_MEOW_RELEASE, 0.001, 4.0),
+            vibrato_amount: percent("Vibrato Amount", DEFAULT_VIBRATO_AMOUNT),
+            vibrato_attack: time("Vibrato Attack", DEFAULT_VIBRATO_ATTACK, 0.001, 5.0),
+            vibrato_rate: EnumParam::new("Vibrato Rate", DEFAULT_VIBRATO_RATE),
+            portamento_time: time("Portamento", DEFAULT_PORTAMENTO, 0.0001, 5.0),
+            noise_mix: percent("Noise", DEFAULT_NOISE_MIX),
+            chorus_mix: percent("Chorus", DEFAULT_CHORUS_MIX),
+            pitch_bend: IntParam::new(
                 "Pitchbend",
-                DEFAULT_PITCHBEND,
-                [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
-                semitone_formatter,
-            ),
-            polycat: Parameter::new("Polycat", DEFAULT_POLYCAT, [false, true], polycat_formatter),
+                DEFAULT_PITCHBEND as i32,
+                IntRange::Linear { min: 1, max: 12 },
+            )
+            .with_unit(" semis"),
+            polycat: BoolParam::new("Polycat", DEFAULT_POLYCAT)
+                .with_value_to_string(Arc::new(polycat_formatter)),
             // Internal parameters (might not be exposed)
-            gain: Parameter::decibel("Master Volume", DEFAULT_MASTER_VOL, gain),
-            filter_envlope_mod: Parameter::freq(
+            gain: decibel("Master Volume", DEFAULT_MASTER_VOL, -36.0, 12.0),
+            filter_envlope_mod: freq(
                 "Filter EnvMod",
                 DEFAULT_FILTER_ENVLOPE_MOD,
                 filter_envelope_mod,
             ),
-            filter_dry_wet: Parameter::percent("Filter DryWet", DEFAULT_FILTER_DRY_WET),
-            filter_q: Parameter::new("Filter Q", DEFAULT_FILTER_Q, filter_q, unitless_formatter),
-            filter_type: Parameter::new(
-                "Filter Type",
-                DEFAULT_FILTER_TYPE,
-                FILTER_TYPES,
-                filter_type_formatter,
-            ),
-            filter_cutoff_freq: Parameter::freq(
+            filter_dry_wet: percent("Filter DryWet", DEFAULT_FILTER_DRY_WET),
+            filter_q: FloatParam::new("Filter Q", DEFAULT_FILTER_Q, filter_q),
+            filter_type: EnumParam::new("Filter Type", DEFAULT_FILTER_TYPE),
+            filter_cutoff_freq: freq(
                 "Filter Cutoff",
                 DEFAULT_FILTER_CUTOFF_FREQ,
                 filter_cutoff_freq,
             ),
-            chorus_depth: Parameter::new(
-                "Chorus Depth",
-                DEFAULT_CHORUS_DEPTH,
-                chorus_depth,
-                unitless_formatter,
-            ),
-            chorus_distance: Parameter::new(
+            chorus_depth: FloatParam::new("Chorus Depth", DEFAULT_CHORUS_DEPTH, chorus_depth),
+            chorus_distance: FloatParam::new(
                 "Chorus Distance",
                 DEFAULT_CHORUS_DISTANCE,
                 chorus_distance,
-                unitless_formatter,
             ),
-            chorus_rate: Parameter::freq("Chorus Rate", DEFAULT_CHORUS_RATE, chorus_rate),
-            phase: Parameter::new("Phase", DEFAULT_PHASE, IDENTITY, angle_formatter),
-            vibrato_note_shape: Parameter::new(
-                "Vibrato Note Shape",
-                NoteShape::Triangle(0.5),
-                [NoteShape::Triangle(0.5), NoteShape::Sine],
-                note_shape_formatter,
-            ),
-            chorus_note_shape: Parameter::new(
-                "Chorus Note Shape",
-                NoteShape::Sine,
-                [NoteShape::Triangle(0.5), NoteShape::Sine],
-                note_shape_formatter,
-            ),
-        }
-    }
-
-    fn get(&self, index: i32) -> Option<ParameterView> {
-        // This deny makes it a compile time error if the NUM_PARAMS value is incorrect
-        #[deny(unreachable_patterns)]
-        let view = match index as u8 {
-            0 => self.meow_attack.view(),
-            1 => self.meow_decay.view(),
-            2 => self.meow_sustain.view(),
-            3 => self.meow_release.view(),
-            4 => self.vibrato_amount.view(),
-            5 => self.vibrato_attack.view(),
-            6 => self.vibrato_rate.view(),
-            7 => self.portamento_time.view(),
-            8 => self.noise_mix.view(),
-            9 => self.chorus_mix.view(),
-            10 => self.pitch_bend.view(),
-            11 => self.polycat.view(),
-            12 => self.filter_envlope_mod.view(),
-            13 => self.filter_dry_wet.view(),
-            14 => self.filter_q.view(),
-            15 => self.filter_type.view(),
-            16 => self.filter_cutoff_freq.view(),
-            17 => self.chorus_depth.view(),
-            18 => self.chorus_distance.view(),
-            19 => self.chorus_rate.view(),
-            20 => self.phase.view(),
-            21 => self.gain.view(),
-            22 => self.vibrato_note_shape.view(),
-            23 => self.chorus_note_shape.view(),
-            // This branch is unreachable if NUM_PARAMS is too low (which normally issues an
-            // unreachable warning, but will be a hard error due to the deny above).
-            Parameters::NUM_PARAMS => return None,
-            // This branch does not fully cover all values if NUM_PARAMS is too high (which issues
-            // an error).
-            Parameters::NUM_PARAMS..=u8::MAX => return None,
-        };
-        Some(view)
-    }
-}
-
-#[derive(Debug, Clone)]
-struct ParameterView<'a> {
-    name: &'a str,
-    text_unit: String,
-    text_value: String,
-    value: &'a AtomicFloat,
-}
-
-impl<'a> ParameterView<'a> {
-    fn get(&self) -> f32 {
-        self.value.get()
-    }
-
-    fn set(&self, value: f32) {
-        self.value.set(value)
-    }
-}
-
-struct Parameter<T> {
-    name: &'static str,
-    value: AtomicFloat,
-    easer: Box<dyn Easer<T> + Send + Sync>,
-    formatter: fn(T) -> (String, String),
-}
-
-impl<T> Parameter<T> {
-    fn get(&self) -> T {
-        let value = self.get_raw();
-        self.easer.ease(value)
-    }
-
-    fn get_raw(&self) -> f32 {
-        self.value.get()
-    }
-
-    fn new(
-        name: &'static str,
-        default: T,
-        easer: impl Easer<T> + 'static + Send + Sync,
-        formatter: fn(T) -> (String, String),
-    ) -> Parameter<T> {
-        let default = easer.inv_ease(default);
-        Parameter {
-            name,
-            value: default.into(),
-            easer: Box::new(easer),
-            formatter,
-        }
-    }
-
-    fn view(&self) -> ParameterView {
-        let value = self.get();
-        let (text_value, text_unit) = (self.formatter)(value);
-        ParameterView {
-            text_unit,
-            text_value,
-            name: self.name,
-            value: &self.value,
+            chorus_rate: freq("Chorus Rate", DEFAULT_CHORUS_RATE, chorus_rate),
+            phase: FloatParam::new("Phase", DEFAULT_PHASE, IDENTITY)
+                .with_unit(" deg")
+                .with_value_to_string(Arc::new(angle_formatter)),
+            vibrato_note_shape: EnumParam::new("Vibrato Note Shape", NoteShape::Triangle),
+            chorus_note_shape: EnumParam::new("Chorus Note Shape", NoteShape::Sine),
         }
     }
 }
 
-impl Parameter<Seconds> {
-    fn time(name: &'static str, default: Seconds, min: f32, max: f32) -> Parameter<Seconds> {
-        fn time_formatter(value: Seconds) -> (String, String) {
-            let value = value.get();
-            if value < 1.0 {
-                (format!("{:.1}", value * 1000.0), "ms".to_string())
-            } else {
-                (format!("{:.2}", value), "sec".to_string())
-            }
-        }
-        let easer = Easing::Exponential {
-            start: min.into(),
-            end: max.into(),
-        };
-        Parameter::new(name, default, easer, time_formatter)
+impl Parameters {
+    pub fn dbg_polycat(&self) -> &BoolParam {
+        &self.polycat
     }
-}
 
-impl Parameter<Decibel> {
-    fn decibel(name: &'static str, default: Decibel, easer: Easing<Decibel>) -> Parameter<Decibel> {
-        fn decibel_formatter(decibel: Decibel) -> (String, String) {
-            if decibel.get_db() <= Decibel::NEG_INF_DB_THRESHOLD {
-                ("-inf".to_string(), "dB".to_string())
-            } else if decibel.get_db() < 0.0 {
-                (format!("{:.2}", decibel.get_db()), "dB".to_string())
-            } else {
-                (format!("+{:.2}", decibel.get_db()), "dB".to_string())
-            }
-        }
-
-        Parameter::new(name, default, easer, decibel_formatter)
+    pub fn dbg_meow_decay(&self) -> &FloatParam {
+        &self.meow_decay
     }
-}
 
-impl Parameter<f32> {
-    fn percent(name: &'static str, default: f32) -> Parameter<f32> {
-        fn formatter(value: f32) -> (String, String) {
-            (format!("{:.1}", value * 100.0), "%".to_string())
-        }
-        Parameter::new(name, default, IDENTITY, formatter)
-    }
-}
-
-impl Parameter<Hertz> {
-    pub fn freq(name: &'static str, default: Hertz, easer: Easing<Hertz>) -> Parameter<Hertz> {
-        fn formatter(hz: Hertz) -> (String, String) {
-            let hz = hz.get();
-            if hz < 1000.0 {
-                (format!("{:.2}", hz), "Hz".to_string())
-            } else {
-                (format!("{:.2}", hz / 1000.0), "kHz".to_string())
-            }
-        }
-        Parameter::new(name, default, easer, formatter)
+    pub fn dbg_meow_release(&self) -> &FloatParam {
+        &self.meow_release
     }
 }
 
@@ -625,15 +494,23 @@ impl EnvelopeParams<f32> for VibratoEnvelopeParams {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Enum)]
 enum VibratoRate {
+    #[name = "4 bar"]
     FourBar,
+    #[name = "2 bar"]
     TwoBar,
+    #[name = "1 bar"]
     OneBar,
+    #[name = "1/2"]
     Half,
+    #[name = "1/4"]
     Quarter,
+    #[name = "1/8"]
     Eighth,
+    #[name = "1/12"]
     Twelfth,
+    #[name = "1/16"]
     Sixteenth,
 }
 

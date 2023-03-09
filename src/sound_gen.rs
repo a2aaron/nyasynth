@@ -6,8 +6,7 @@ use crate::{
 };
 
 use biquad::{Biquad, DirectForm1, ToHertz, Q_BUTTERWORTH_F32};
-use variant_count::VariantCount;
-use wmidi::{PitchBend, U14};
+use nih_plug::prelude::Enum;
 
 const TAU: f32 = std::f32::consts::TAU;
 
@@ -712,14 +711,14 @@ enum NoteStateEdge {
     NoteRetriggered, // The note is being pressed, but not the first time
 }
 
-#[derive(Debug, Clone, Copy, VariantCount, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Enum)]
 pub enum NoteShape {
     /// A sine wave
     Sine,
     /// A sawtooth wave
     Sawtooth,
     /// A triangle wave, with a warp parameter.
-    Triangle(f32),
+    Triangle,
 }
 
 impl NoteShape {
@@ -730,25 +729,12 @@ impl NoteShape {
         match self {
             NoteShape::Sine => (angle * TAU).sin(),
             NoteShape::Sawtooth => 2.0 * angle - 1.0,
-            NoteShape::Triangle(warp) => {
-                let warp = *warp;
-                // Check if the warp makes the note a sawtooth and directly calculate
-                // it. This avoids potential divide by zero issues.
-                // Clippy lint complains about floating point compares but this
-                // is ok to do since 1.0 is exactly representible in floating
-                // point and also warp is always in range [0.0, 1.0].
-                #[allow(clippy::float_cmp)]
-                if warp == 0.0 {
-                    return -2.0 * angle + 1.0;
-                } else if warp == 1.0 {
-                    return 2.0 * angle - 1.0;
-                }
-
+            NoteShape::Triangle => {
                 // Otherwise, compute a triangle/skewed triangle shape.
-                if angle < warp {
-                    (2.0 * angle / warp) - 1.0
+                if angle < 0.5 {
+                    (angle) - 1.0
                 } else {
-                    -(2.0 * (angle - warp)) / (1.0 - warp) + 1.0
+                    -(2.0 * angle - 1.0) / (0.5) + 1.0
                 }
             }
         }
@@ -798,16 +784,4 @@ pub fn to_pitch_envelope(
         });
 
     (iter, last_bend)
-}
-
-/// Convert a PitchBend U14 value into a normalized [-1.0, 1.0] float
-pub fn normalize_pitch_bend(pitch_bend: PitchBend) -> NormalizedPitchbend {
-    // A pitchbend is a U14 in range [0, 0x3FFF] with 0x2000 meaning "no bend",
-    // 0x0 meaning "max down bend" and 0x3FFF meaning "max up bend".
-    // convert to u16 - range [0, 0x3FFF]
-    let pitch_bend = U14::data_to_slice(&[pitch_bend])[0];
-    // convert to i16 - range [-0x2000, 0x1FFF]
-    let pitch_bend = pitch_bend as i16 - 0x2000;
-    // convert to f32 - range [-1.0, 1.0]
-    pitch_bend as f32 * (1.0 / 0x2000 as f32)
 }

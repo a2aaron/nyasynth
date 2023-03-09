@@ -1,6 +1,9 @@
 use biquad::ToHertz;
 use derive_more::{Add, From, Into, Sub};
-use nih_plug::util::midi_note_to_freq;
+use nih_plug::{
+    prelude::{Enum, FloatRange},
+    util::midi_note_to_freq,
+};
 use ordered_float::OrderedFloat;
 
 use crate::{
@@ -11,7 +14,7 @@ use crate::{
 pub type SampleTime = usize;
 
 /// A sample rate in Hz/seconds. Must be a positive value.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct SampleRate(pub f32);
 
 impl SampleRate {
@@ -190,10 +193,11 @@ impl Hertz {
         Hertz::new(hz)
     }
 
-    pub fn ease_exp(start: f32, end: f32) -> Easing<Hertz> {
-        Easing::Exponential {
-            start: start.into(),
-            end: end.into(),
+    pub fn ease_exp(start: f32, end: f32) -> FloatRange {
+        FloatRange::Skewed {
+            min: start,
+            max: end,
+            factor: 6.0,
         }
     }
 
@@ -244,7 +248,7 @@ impl std::ops::Div<Hertz> for Hertz {
 /// are treated as zero. This is done so that it is possible to lerp from negative infinity decibels
 /// (that is, an amplitude of zero) to positive amounts in a reasonable fashion (in particular, this
 /// means extremely quiet sounds will instead become silence).
-pub struct Decibel(f32);
+pub struct Decibel(pub f32);
 
 impl Decibel {
     /// The threshold for which Decibel values below it will be treated as negative
@@ -344,12 +348,17 @@ impl std::ops::Div<Decibel> for Decibel {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Enum)]
 pub enum FilterType {
+    #[name = "Low Pass (Single Pole)"]
     SinglePoleLowPass,
+    #[name = "Low Pass"]
     LowPass,
+    #[name = "High Pass"]
     HighPass,
+    #[name = "Band Pass"]
     BandPass,
+    #[name = "Notch"]
     Notch,
 }
 
@@ -380,4 +389,16 @@ impl From<FilterType> for biquad::Type<f32> {
             FilterType::Notch => biquad::Type::Notch,
         }
     }
+}
+
+pub const fn ease_exp(min: f32, max: f32) -> FloatRange {
+    FloatRange::Skewed {
+        min,
+        max,
+        factor: 6.0,
+    }
+}
+
+pub const fn ease_linear(min: f32, max: f32) -> FloatRange {
+    FloatRange::Linear { min, max }
 }

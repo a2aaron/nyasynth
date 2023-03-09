@@ -14,7 +14,6 @@ use std::{
     sync::Arc,
 };
 
-use backtrace::Backtrace;
 use chorus::Chorus;
 use common::{Note, SampleRate, Vel};
 use ease::lerp;
@@ -90,6 +89,7 @@ pub struct Nyasynth {
     chorus: Chorus,
     /// The global noise generator
     noise_generator: NoiseGenerator,
+    sample_rate: SampleRate,
 }
 
 impl Plugin for Nyasynth {
@@ -118,31 +118,60 @@ impl Plugin for Nyasynth {
 
     fn initialize(
         &mut self,
-        audio_io_layout: &AudioIOLayout,
+        _audio_io_layout: &AudioIOLayout,
         buffer_config: &BufferConfig,
         context: &mut impl InitContext<Self>,
     ) -> bool {
+        let result = simple_logging::log_to_file(&*LOG_DIR, log::LevelFilter::Info);
+        // let result = simple_logging::log_to_file(
+        //     "D:\\dev\\Rust\\nyasynth\\nyasynth.log",
+        //     log::LevelFilter::Info,
+        // );
+
+        std::env::set_var("NIH_LOG", "/Users/aaron/dev/Rust/nyasynth/nyasynth.log");
+
+        if let Err(err) = result {
+            println!("Couldn't start logging! {}", err);
+        } else {
+            if PROJECT_DIRS.is_none() {
+                log::info!("Couldn't obtain project dirs folder!");
+            }
+            log::info!("Logging to {}", LOG_DIR.display());
+        }
+
+        std::panic::set_hook(Box::new(|panic_info| {
+            log::info!("PANICKED!! Reason: {:#?}", panic_info);
+            let bt = backtrace::Backtrace::new();
+            log::info!("Backtrace: {:#?}", bt);
+        }));
+
+        log::info!("Begin VST log...");
+
         // On a retrigger, the next note is delayed by RETRIGGER_TIME. Hence, there is a latency
         // of RETRIGGER_TIME. Note that this latency doesn't exist for non-retriggered notes.
         context.set_latency_samples(RETRIGGER_TIME as u32);
-
+        self.set_sample_rate(SampleRate(buffer_config.sample_rate));
         true
     }
 
     fn process(
         &mut self,
         buffer: &mut Buffer,
-        aux: &mut AuxiliaryBuffers,
+        _aux: &mut AuxiliaryBuffers,
         context: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
         self.process_events(context);
         let sample_rate = SampleRate(context.transport().sample_rate);
+        if sample_rate != self.sample_rate {
+            self.set_sample_rate(sample_rate);
+        }
+
         let tempo = context.transport().tempo.unwrap_or(120.0) as f32;
         self.process(buffer, sample_rate, tempo);
         ProcessStatus::Normal
     }
 
-    fn filter_state(state: &mut PluginState) {}
+    fn filter_state(_state: &mut PluginState) {}
 
     fn reset(&mut self) {}
 
@@ -162,7 +191,7 @@ impl Plugin for Nyasynth {
         Box::new(|_| ())
     }
 
-    fn editor(&self, async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
+    fn editor(&self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
         None
     }
 }
@@ -178,6 +207,7 @@ impl Default for Nyasynth {
             vibrato_lfo: Oscillator::new(),
             chorus: Chorus::new(sample_rate),
             noise_generator: NoiseGenerator::new(),
+            sample_rate: SampleRate(44100.0),
         }
     }
 }
@@ -189,31 +219,6 @@ impl Vst3Plugin for Nyasynth {
 }
 
 impl Nyasynth {
-    fn init(&mut self) {
-        let result = simple_logging::log_to_file(&*LOG_DIR, log::LevelFilter::Info);
-        // let result = simple_logging::log_to_file(
-        //     "D:\\dev\\Rust\\nyasynth\\nyasynth.log",
-        //     log::LevelFilter::Info,
-        // );
-
-        if let Err(err) = result {
-            println!("Couldn't start logging! {}", err);
-        } else {
-            if PROJECT_DIRS.is_none() {
-                log::info!("Couldn't obtain project dirs folder!");
-            }
-            log::info!("Logging to {}", LOG_DIR.display());
-        }
-
-        std::panic::set_hook(Box::new(|panic_info| {
-            log::info!("PANICKED!! Reason: {:#?}", panic_info);
-            let bt = Backtrace::new();
-            log::info!("Backtrace: {:#?}", bt);
-        }));
-
-        log::info!("Begin VST log...");
-    }
-
     // Output audio given the current state of the VST
     fn process(&mut self, buffer: &mut Buffer, sample_rate: SampleRate, tempo: f32) {
         let params = MeowParameters::new(&self.params, tempo);
@@ -310,13 +315,7 @@ impl Nyasynth {
         while let Some(event) = events.next_event() {
             let frame_delta = event.timing() as i32;
             match event {
-                NoteEvent::NoteOn {
-                    timing,
-                    voice_id,
-                    channel,
-                    note,
-                    velocity,
-                } => {
+                NoteEvent::NoteOn { note, velocity, .. } => {
                     let vel = Vel::new(velocity);
                     let note = Note(note);
                     let polycat = params.polycat;
@@ -355,13 +354,7 @@ impl Nyasynth {
                         }
                     };
                 }
-                NoteEvent::NoteOff {
-                    timing,
-                    voice_id,
-                    channel,
-                    note,
-                    velocity,
-                } => {
+                NoteEvent::NoteOff { note, .. } => {
                     let polycat = params.polycat;
                     let note = Note(note);
                     let top_of_stack = self.key_tracker.note_off(note);
@@ -407,11 +400,7 @@ impl Nyasynth {
                         }
                     }
                 }
-                NoteEvent::MidiPitchBend {
-                    timing,
-                    channel,
-                    value,
-                } => {
+                NoteEvent::MidiPitchBend { value, .. } => {
                     self.pitch_bend.push((value, frame_delta));
                 }
                 _ => todo!(),
@@ -420,6 +409,17 @@ impl Nyasynth {
 
         // Sort pitch bend changes by delta_frame.
         self.pitch_bend.sort_unstable_by(|a, b| a.1.cmp(&b.1));
+    }
+
+    fn set_sample_rate(&mut self, sample_rate: SampleRate) {
+        self.sample_rate = sample_rate;
+        self.chorus.set_sample_rate(sample_rate);
+    }
+}
+
+impl Nyasynth {
+    pub fn debug_params(&mut self) -> &mut Arc<Parameters> {
+        &mut self.params
     }
 }
 
