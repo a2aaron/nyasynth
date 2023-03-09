@@ -1,37 +1,29 @@
-use std::{
-    collections::BTreeMap,
-    error::Error,
-    path::{Path, PathBuf},
-    sync::{Arc, Mutex},
-};
+use std::{collections::BTreeMap, error::Error, path::PathBuf};
 
 use clap::Parser;
 use derive_more::{Add, AddAssign, From, Into, Sub, SubAssign};
-use nyasynth::ease::{Easer, Easing};
+use nih_plug::context::process::Transport;
+use nih_plug::context::PluginApi;
+use nih_plug::prelude::*;
+use nyasynth::Nyasynth;
 use nyasynth::{
     self,
     common::{SampleRate, SampleTime},
 };
-use vst::{
-    api::{SmpteFrameRate, TimeInfo, TimeInfoFlags},
-    host::{Host, HostBuffer, PluginLoader},
-    prelude::*,
-};
 
-use vst::event::Event as VstEvent;
-use vst::event::SysExEvent as VstSysExEvent;
+type VstEvent = NoteEvent<<Nyasynth as Plugin>::SysExMessage>;
 
-struct MidiBlocks<'a> {
-    event_blocks: BTreeMap<usize, Vec<VstEvent<'a>>>,
+struct MidiBlocks {
+    event_blocks: BTreeMap<usize, Vec<VstEvent>>,
 }
 
-impl<'a> MidiBlocks<'a> {
+impl MidiBlocks {
     fn new(
-        smf: midly::Smf<'a>,
+        smf: midly::Smf<'_>,
         sample_rate: SampleRate,
         block_size: usize,
         tempo_info: TempoInfo,
-    ) -> MidiBlocks<'a> {
+    ) -> MidiBlocks {
         let events = to_vst_events(&smf, sample_rate, tempo_info);
         let event_blocks = split_blocks(events, block_size);
         MidiBlocks { event_blocks }
@@ -43,43 +35,6 @@ impl<'a> MidiBlocks<'a> {
 
     fn max_block(&self) -> usize {
         *self.event_blocks.keys().max().unwrap_or(&0)
-    }
-}
-
-struct SimpleHost {
-    block_size: usize,
-    tempo: f64,
-}
-
-impl SimpleHost {
-    fn new(block_size: usize, tempo: f64) -> SimpleHost {
-        SimpleHost { block_size, tempo }
-    }
-}
-
-impl Host for SimpleHost {
-    fn get_time_info(&self, _mask: i32) -> Option<TimeInfo> {
-        let time_info = TimeInfo {
-            sample_pos: 0.0,
-            sample_rate: 44100.0,
-            nanoseconds: 100.0,
-            ppq_pos: 0.0,
-            tempo: self.tempo,
-            bar_start_pos: 0.0,
-            cycle_start_pos: 0.0,
-            cycle_end_pos: 0.0,
-            time_sig_numerator: 0,
-            time_sig_denominator: 0,
-            smpte_offset: 0,
-            smpte_frame_rate: SmpteFrameRate::Smpte60fps,
-            samples_to_next_clock: 0,
-            flags: TimeInfoFlags::TEMPO_VALID.bits(),
-        };
-        Some(time_info)
-    }
-
-    fn get_block_size(&self) -> isize {
-        self.block_size as isize
     }
 }
 
@@ -136,21 +91,39 @@ impl TempoInfo {
 
 // Split events into blocks such that no block exactly `block_size` samples large. Events must be sorted by the sample time.
 // This also sets the `delta_frames` for the events to the appropriate value.
-fn split_blocks<'a>(
-    events: Vec<(VstEvent<'a>, SampleTime)>,
+fn split_blocks(
+    events: Vec<(VstEvent, SampleTime)>,
     block_size: usize,
-) -> BTreeMap<usize, Vec<VstEvent<'a>>> {
+) -> BTreeMap<usize, Vec<VstEvent>> {
     let mut blocks = BTreeMap::new();
 
-    for (event, samples) in events {
+    for (mut event, samples) in events {
         let block_number = samples / block_size;
         let interblock_sample_number = samples % block_size;
         let block = blocks.entry(block_number).or_insert(vec![]);
-        match event {
-            VstEvent::Midi(mut event) => event.delta_frames = interblock_sample_number as i32,
-            VstEvent::SysEx(mut event) => event.delta_frames = interblock_sample_number as i32,
-            VstEvent::Deprecated(mut event) => event.delta_frames = interblock_sample_number as i32,
-        }
+
+        let timing = match &mut event {
+            NoteEvent::NoteOn { timing, .. } => timing,
+            NoteEvent::NoteOff { timing, .. } => timing,
+            NoteEvent::Choke { timing, .. } => timing,
+            NoteEvent::VoiceTerminated { timing, .. } => timing,
+            NoteEvent::PolyModulation { timing, .. } => timing,
+            NoteEvent::MonoAutomation { timing, .. } => timing,
+            NoteEvent::PolyPressure { timing, .. } => timing,
+            NoteEvent::PolyVolume { timing, .. } => timing,
+            NoteEvent::PolyPan { timing, .. } => timing,
+            NoteEvent::PolyTuning { timing, .. } => timing,
+            NoteEvent::PolyVibrato { timing, .. } => timing,
+            NoteEvent::PolyExpression { timing, .. } => timing,
+            NoteEvent::PolyBrightness { timing, .. } => timing,
+            NoteEvent::MidiChannelPressure { timing, .. } => timing,
+            NoteEvent::MidiPitchBend { timing, .. } => timing,
+            NoteEvent::MidiCC { timing, .. } => timing,
+            NoteEvent::MidiProgramChange { timing, .. } => timing,
+            NoteEvent::MidiSysEx { timing, .. } => timing,
+            _ => unreachable!(),
+        };
+        *timing = interblock_sample_number as u32;
         block.push(event)
     }
     blocks
@@ -159,11 +132,11 @@ fn split_blocks<'a>(
 /// Convert the tracks in a [midly::Smf] object into [VstEvent] events. Additionally, the
 /// time for when this event occurs, given in [SampleTime] is also provided. Note that the `delta_frames`
 /// value on the [VstEvent]s is always zero, and [VstMidiEvent] values are not set other than `data`.
-fn to_vst_events<'a>(
-    smf: &midly::Smf<'a>,
+fn to_vst_events(
+    smf: &midly::Smf,
     sample_rate: SampleRate,
     tempo_info: TempoInfo,
-) -> Vec<(VstEvent<'a>, SampleTime)> {
+) -> Vec<(VstEvent, SampleTime)> {
     let mut vst_events = vec![];
     for track in &smf.tracks {
         let mut delta_ticks = MIDITick(0);
@@ -171,27 +144,9 @@ fn to_vst_events<'a>(
             delta_ticks += track_event.delta.into();
             let vst_event = match track_event.kind {
                 midly::TrackEventKind::Midi { channel, message } => {
-                    let event = to_wmidi_event(channel, message);
-                    let mut data = [0; 3];
-                    event.copy_to_slice(&mut data).unwrap();
-                    let event = MidiEvent {
-                        data,
-                        delta_frames: 0,
-                        live: false,
-                        note_length: None,
-                        note_offset: None,
-                        detune: 0,
-                        note_off_velocity: 0,
-                    };
-                    Some(VstEvent::Midi(event))
+                    Some(to_vst_event(channel, message))
                 }
-                midly::TrackEventKind::SysEx(data) => {
-                    let event = VstSysExEvent {
-                        payload: data,
-                        delta_frames: 0,
-                    };
-                    Some(VstEvent::SysEx(event))
-                }
+                midly::TrackEventKind::SysEx(_) => None,
                 midly::TrackEventKind::Escape(_) => None,
                 midly::TrackEventKind::Meta(_) => None,
             };
@@ -204,6 +159,58 @@ fn to_vst_events<'a>(
     // Sort by sample times.
     vst_events.sort_by(|(_, a), (_, b)| a.cmp(b));
     vst_events
+}
+
+fn to_vst_event(channel: midly::num::u4, midi_event: midly::MidiMessage) -> VstEvent {
+    fn normalize_u7(u7: midly::num::u7) -> f32 {
+        u7.as_int() as f32 / 127.0
+    }
+
+    let channel = channel.as_int();
+    match midi_event {
+        midly::MidiMessage::NoteOff { key, vel } => NoteEvent::NoteOff {
+            timing: 0,
+            voice_id: None,
+            channel,
+            note: key.as_int(),
+            velocity: normalize_u7(vel),
+        },
+        midly::MidiMessage::NoteOn { key, vel } => NoteEvent::NoteOn {
+            timing: 0,
+            voice_id: None,
+            channel,
+            note: key.as_int(),
+            velocity: normalize_u7(vel),
+        },
+        midly::MidiMessage::Aftertouch { key, vel } => NoteEvent::PolyPressure {
+            timing: 0,
+            voice_id: None,
+            channel,
+            note: key.as_int(),
+            pressure: normalize_u7(vel),
+        },
+        midly::MidiMessage::Controller { controller, value } => NoteEvent::MidiCC {
+            timing: 0,
+            channel,
+            cc: controller.as_int(),
+            value: normalize_u7(value),
+        },
+        midly::MidiMessage::ProgramChange { program } => NoteEvent::MidiProgramChange {
+            timing: 0,
+            channel,
+            program: program.as_int(),
+        },
+        midly::MidiMessage::ChannelAftertouch { vel } => NoteEvent::MidiChannelPressure {
+            timing: 0,
+            channel,
+            pressure: normalize_u7(vel),
+        },
+        midly::MidiMessage::PitchBend { bend } => NoteEvent::MidiPitchBend {
+            timing: 0,
+            channel,
+            value: bend.as_f32(),
+        },
+    }
 }
 
 #[derive(Debug, Clone, Copy, Add, AddAssign, Sub, SubAssign, From, Into)]
@@ -226,66 +233,99 @@ impl From<MIDITick> for f64 {
     }
 }
 
-fn to_wmidi_event(
-    channel: midly::num::u4,
-    message: midly::MidiMessage,
-) -> wmidi::MidiMessage<'static> {
-    fn to_wmidi_u7(u7: midly::num::u7) -> wmidi::U7 {
-        wmidi::U7::try_from(u7.as_int()).unwrap()
+struct DebugContext;
+
+impl InitContext<Nyasynth> for DebugContext {
+    fn plugin_api(&self) -> PluginApi {
+        PluginApi::Standalone
     }
 
-    fn to_wmidi_u14(bend: midly::PitchBend) -> wmidi::U14 {
-        wmidi::U14::try_from((bend.as_int() + 0x2000) as u16).unwrap()
+    fn execute(&self, _task: ()) {}
+
+    fn set_latency_samples(&self, _samples: u32) {}
+
+    fn set_current_voice_capacity(&self, _capacity: u32) {}
+}
+
+impl GuiContext for DebugContext {
+    fn plugin_api(&self) -> PluginApi {
+        PluginApi::Standalone
     }
 
-    fn to_channel(channel: midly::num::u4) -> wmidi::Channel {
-        wmidi::Channel::from_index(channel.as_int()).unwrap()
+    fn request_resize(&self) -> bool {
+        false
     }
 
-    fn to_note(note: midly::num::u7) -> wmidi::Note {
-        let note = wmidi::U7::try_from(note.as_int()).unwrap();
-        wmidi::Note::from(note)
+    unsafe fn raw_begin_set_parameter(&self, _param: ParamPtr) {}
+
+    unsafe fn raw_set_parameter_normalized(&self, param: ParamPtr, _normalized: f32) {
+        match param {
+            ParamPtr::FloatParam(_param) => todo!(),
+            ParamPtr::IntParam(_) => todo!(),
+            ParamPtr::BoolParam(_) => todo!(),
+            ParamPtr::EnumParam(_) => todo!(),
+        }
     }
 
-    fn to_control_function(controller: midly::num::u7) -> wmidi::ControlFunction {
-        wmidi::ControlFunction(to_wmidi_u7(controller))
+    unsafe fn raw_end_set_parameter(&self, _param: ParamPtr) {}
+
+    fn get_state(&self) -> PluginState {
+        todo!()
     }
 
-    let channel = to_channel(channel);
-    match message {
-        midly::MidiMessage::NoteOff { key, vel } => {
-            let key = to_note(key);
-            let vel = to_wmidi_u7(vel);
-            wmidi::MidiMessage::NoteOff(channel, key, vel)
-        }
-        midly::MidiMessage::NoteOn { key, vel } => {
-            let key = to_note(key);
-            let vel = to_wmidi_u7(vel);
-            wmidi::MidiMessage::NoteOn(channel, key, vel)
-        }
-        midly::MidiMessage::PitchBend { bend } => {
-            let bend = to_wmidi_u14(bend);
-            wmidi::MidiMessage::PitchBendChange(channel, bend)
-        }
-        midly::MidiMessage::Aftertouch { key, vel } => {
-            let key = to_note(key);
-            let vel = to_wmidi_u7(vel);
-            wmidi::MidiMessage::PolyphonicKeyPressure(channel, key, vel)
-        }
-        midly::MidiMessage::ChannelAftertouch { vel } => {
-            let vel = to_wmidi_u7(vel);
-            wmidi::MidiMessage::ChannelPressure(channel, vel)
-        }
-        midly::MidiMessage::Controller { controller, value } => {
-            let controller = to_control_function(controller);
-            let value = to_wmidi_u7(value);
-            wmidi::MidiMessage::ControlChange(channel, controller, value)
-        }
-        midly::MidiMessage::ProgramChange { program } => {
-            let program = to_wmidi_u7(program);
-            wmidi::MidiMessage::ProgramChange(channel, program)
+    fn set_state(&self, _state: PluginState) {
+        todo!()
+    }
+}
+
+struct DebugProcessContext {
+    events: Vec<VstEvent>,
+    event_index: usize,
+    transport: Transport,
+}
+
+impl DebugProcessContext {
+    fn new(
+        events: Vec<VstEvent>,
+        tempo_info: &TempoInfo,
+        sample_rate: SampleRate,
+    ) -> DebugProcessContext {
+        let tempo = tempo_info.beats_per_minute();
+        let sample_rate = sample_rate.get();
+        let mut transport: Transport = todo!();
+        transport.tempo = Some(tempo);
+        DebugProcessContext {
+            events,
+            event_index: 0,
+            transport,
         }
     }
+}
+
+impl ProcessContext<Nyasynth> for DebugProcessContext {
+    fn plugin_api(&self) -> PluginApi {
+        PluginApi::Standalone
+    }
+
+    fn execute_background(&self, _task: ()) {}
+
+    fn execute_gui(&self, _task: ()) {}
+
+    fn transport(&self) -> &Transport {
+        &self.transport
+    }
+
+    fn next_event(&mut self) -> Option<PluginNoteEvent<Nyasynth>> {
+        let event = self.events.get(self.event_index);
+        self.event_index += 1;
+        event.copied()
+    }
+
+    fn send_event(&mut self, _event: PluginNoteEvent<Nyasynth>) {}
+
+    fn set_latency_samples(&self, _samples: u32) {}
+
+    fn set_current_voice_capacity(&self, _capacity: u32) {}
 }
 
 #[derive(Debug, Parser)]
@@ -311,36 +351,28 @@ fn main() -> Result<(), Box<dyn Error>> {
     let tempo_info = TempoInfo::new(&smf);
     let blocks = MidiBlocks::new(smf, sample_rate, block_size, tempo_info);
 
-    let host = SimpleHost::new(block_size, tempo_info.beats_per_minute());
-    let host = Arc::new(Mutex::new(host));
+    let mut nyasynth = Nyasynth::default();
+    let mut context = DebugContext;
 
-    let path = Path::new(&args.vst_path);
-    let mut loader = PluginLoader::load(path, host)?;
-    let mut nyasynth = loader.instance()?;
-
-    nyasynth.init();
-
-    nyasynth.set_sample_rate(sample_rate.0);
-    nyasynth.set_block_size(block_size as i64);
-
-    nyasynth.resume();
-
-    let params = nyasynth.get_parameter_object();
-    params.set_parameter(11, if args.polycat { 1.0 } else { 0.0 });
-
-    // Set decay and release parameters
-    let decay_secs = Easing::Exponential {
-        start: 0.001,
-        end: 5.0,
+    let audio_io_layout = Nyasynth::AUDIO_IO_LAYOUTS[0];
+    let buffer_config = BufferConfig {
+        sample_rate: sample_rate.get(),
+        min_buffer_size: None,
+        max_buffer_size: block_size as u32,
+        process_mode: ProcessMode::Offline,
+    };
+    nyasynth.initialize(&audio_io_layout, &buffer_config, &mut context);
+    {
+        let params = nyasynth.debug_params();
+        let param_setter = ParamSetter::new(&context);
+        {
+            param_setter.set_parameter(params.dbg_polycat(), args.polycat);
+            // set to 0.5s
+            param_setter.set_parameter(params.dbg_meow_decay(), 0.5);
+            // set to 40ms
+            param_setter.set_parameter(params.dbg_meow_release(), 40.0 / 1000.0);
+        }
     }
-    .inv_ease(0.5);
-    let release_secs = Easing::Exponential {
-        start: 0.001,
-        end: 4.0,
-    }
-    .inv_ease(40.0 / 1000.0);
-    params.set_parameter(1, decay_secs); // about 0.5s
-    params.set_parameter(3, release_secs); // about 40ms
 
     // Set noise on.
     // params.set_parameter(8, 1.0);
@@ -354,22 +386,27 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Set chorus amount
     // params.set_parameter(9, 0.5);
 
+    nyasynth.reset();
+
     let mut outputs: Vec<f32> = Vec::with_capacity(8_000_000);
 
-    let mut host_buffer = HostBuffer::new(0, 2);
-    let mut output_arrays = vec![vec![0.0; block_size]; 2];
-    let mut audio_buffer = host_buffer.bind::<Vec<f32>, Vec<f32>>(&vec![], &mut output_arrays);
+    fn new_buffer<'a>() -> Buffer<'a> {
+        let buffer = Buffer::default();
+        buffer
+    }
 
     for i in 0..(blocks.max_block() + 100) {
         let block = blocks.get(i);
+        let mut context = DebugProcessContext::new(block, &tempo_info, sample_rate);
+        let mut buffer = new_buffer();
+        let mut aux = AuxiliaryBuffers {
+            inputs: &mut [],
+            outputs: &mut [],
+        };
+        // nyasynth.process_events(events_buffer.events());
+        nyasynth.process(&mut buffer, &mut aux, &mut context);
 
-        let mut events_buffer = SendEventBuffer::new(64);
-        events_buffer.store_events(block.iter());
-
-        nyasynth.process_events(events_buffer.events());
-        nyasynth.process(&mut audio_buffer);
-
-        let output_left = &audio_buffer.split().1[0];
+        let output_left = &buffer.as_slice()[0];
         outputs.extend_from_slice(output_left);
     }
 
