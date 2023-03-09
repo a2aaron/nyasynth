@@ -9,65 +9,19 @@ mod neighbor_pairs;
 mod params;
 mod sound_gen;
 
-use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::sync::Arc;
 
 use chorus::Chorus;
 use common::{Note, SampleRate, Vel};
 use ease::lerp;
 use keys::KeyTracker;
 use nih_plug::{nih_export_vst3, prelude::*};
-use once_cell::sync::Lazy;
 use params::{MeowParameters, Parameters};
 
 use sound_gen::{
     to_pitch_envelope, NoiseGenerator, NormalizedPitchbend, Oscillator, SoundGenerator,
     RETRIGGER_TIME,
 };
-
-static PROJECT_DIRS: Lazy<Option<directories::ProjectDirs>> =
-    Lazy::new(|| directories::ProjectDirs::from("", "", "Nyasynth VST"));
-
-pub static LOG_DIR: Lazy<PathBuf> = Lazy::new(|| {
-    let mut log_dir = match PROJECT_DIRS.as_ref() {
-        Some(project_dirs) => project_dirs.cache_dir().to_path_buf(),
-        None => FALLBACK_LOG_DIR.to_path_buf(),
-    };
-    if !log_dir.exists() {
-        if let Err(err) = std::fs::create_dir_all(&log_dir) {
-            log::info!(
-                "Couldn't create log dir {}: Reason: {:?}",
-                log_dir.display(),
-                err
-            );
-        }
-    }
-    log_dir.push("nyasynth.log");
-    log_dir
-});
-
-pub static DATA_DIR: Lazy<PathBuf> = Lazy::new(|| {
-    let data_dir = match PROJECT_DIRS.as_ref() {
-        Some(project_dirs) => project_dirs.data_dir().to_path_buf(),
-        None => FALLBACK_DATA_DIR.to_path_buf(),
-    };
-    if !data_dir.exists() {
-        if let Err(err) = std::fs::create_dir_all(&data_dir) {
-            log::info!(
-                "Couldn't create data dir {}: Reason: {:?}",
-                data_dir.display(),
-                err
-            );
-        }
-    }
-    data_dir
-});
-
-static FALLBACK_DATA_DIR: Lazy<&'static Path> = Lazy::new(|| Path::new("./nyasynth_VST/data/"));
-
-static FALLBACK_LOG_DIR: Lazy<&'static Path> = Lazy::new(|| Path::new("./nyasynth_VST/log"));
 
 /// The main plugin struct.
 pub struct Nyasynth {
@@ -122,30 +76,8 @@ impl Plugin for Nyasynth {
         buffer_config: &BufferConfig,
         context: &mut impl InitContext<Self>,
     ) -> bool {
-        let result = simple_logging::log_to_file(&*LOG_DIR, log::LevelFilter::Info);
-        // let result = simple_logging::log_to_file(
-        //     "D:\\dev\\Rust\\nyasynth\\nyasynth.log",
-        //     log::LevelFilter::Info,
-        // );
-
-        std::env::set_var("NIH_LOG", "/Users/aaron/dev/Rust/nyasynth/nyasynth.log");
-
-        if let Err(err) = result {
-            println!("Couldn't start logging! {}", err);
-        } else {
-            if PROJECT_DIRS.is_none() {
-                log::info!("Couldn't obtain project dirs folder!");
-            }
-            log::info!("Logging to {}", LOG_DIR.display());
-        }
-
-        std::panic::set_hook(Box::new(|panic_info| {
-            log::info!("PANICKED!! Reason: {:#?}", panic_info);
-            let bt = backtrace::Backtrace::new();
-            log::info!("Backtrace: {:#?}", bt);
-        }));
-
-        log::info!("Begin VST log...");
+        // std::env::set_var("NIH_LOG", "/Users/aaron/dev/Rust/nyasynth/nyasynth_nih.log");
+        nih_plug::wrapper::setup_logger();
 
         // On a retrigger, the next note is delayed by RETRIGGER_TIME. Hence, there is a latency
         // of RETRIGGER_TIME. Note that this latency doesn't exist for non-retriggered notes.
@@ -328,7 +260,7 @@ impl Nyasynth {
                     } else {
                         // Monocat mode.
                         if self.notes.len() > 1 {
-                            log::warn!(
+                            nih_warn!(
                                 "More than one note playing in monocat mode? (noteon) {:?}",
                                 self.notes
                             );
@@ -372,7 +304,7 @@ impl Nyasynth {
                     } else {
                         // Monocat mode.
                         if self.notes.len() > 1 {
-                            log::warn!(
+                            nih_warn!(
                                 "More than one note playing in monocat mode? (noteoff) {:?}",
                                 self.notes
                             );

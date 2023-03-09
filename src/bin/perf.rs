@@ -341,81 +341,83 @@ struct Args {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let args = Args::parse();
-    let block_size = 1024;
-    let sample_rate = SampleRate(44100.0);
-
-    let raw = std::fs::read(args.in_file)?;
-    let smf = midly::Smf::parse(&raw)?;
-
-    let tempo_info = TempoInfo::new(&smf);
-    let blocks = MidiBlocks::new(smf, sample_rate, block_size, tempo_info);
-
-    let mut nyasynth = Nyasynth::default();
-    let mut context = DebugContext;
-
-    let audio_io_layout = Nyasynth::AUDIO_IO_LAYOUTS[0];
-    let buffer_config = BufferConfig {
-        sample_rate: sample_rate.get(),
-        min_buffer_size: None,
-        max_buffer_size: block_size as u32,
-        process_mode: ProcessMode::Offline,
-    };
-    nyasynth.initialize(&audio_io_layout, &buffer_config, &mut context);
-    {
-        let params = nyasynth.debug_params();
-        let param_setter = ParamSetter::new(&context);
-        {
-            param_setter.set_parameter(params.dbg_polycat(), args.polycat);
-            // set to 0.5s
-            param_setter.set_parameter(params.dbg_meow_decay(), 0.5);
-            // set to 40ms
-            param_setter.set_parameter(params.dbg_meow_release(), 40.0 / 1000.0);
-        }
-    }
-
-    // Set noise on.
-    // params.set_parameter(8, 1.0);
-
-    // Set vibrato amount
-    // params.set_parameter(4, 1.0);
-
-    // Set vibrato rate
-    // params.set_parameter(6, 0.5);
-
-    // Set chorus amount
-    // params.set_parameter(9, 0.5);
-
-    nyasynth.reset();
-
-    let mut outputs: Vec<f32> = Vec::with_capacity(8_000_000);
-
-    fn new_buffer<'a>() -> Buffer<'a> {
-        let buffer = Buffer::default();
-        buffer
-    }
-
-    for i in 0..(blocks.max_block() + 100) {
-        let block = blocks.get(i);
-        let mut context = DebugProcessContext::new(block, &tempo_info, sample_rate);
-        let mut buffer = new_buffer();
-        let mut aux = AuxiliaryBuffers {
-            inputs: &mut [],
-            outputs: &mut [],
-        };
-        // nyasynth.process_events(events_buffer.events());
-        nyasynth.process(&mut buffer, &mut aux, &mut context);
-
-        let output_left = &buffer.as_slice()[0];
-        outputs.extend_from_slice(output_left);
-    }
-
-    let mut out_file = std::fs::File::create(args.out_file)?;
-    let header = wav::Header::new(wav::WAV_FORMAT_IEEE_FLOAT, 1, 44100, 32);
-    wav::write(
-        header,
-        &wav::BitDepth::ThirtyTwoFloat(outputs),
-        &mut out_file,
-    )?;
+    nih_plug::prelude::nih_export_standalone::<Nyasynth>();
     Ok(())
+    // let args = Args::parse();
+    // let block_size = 1024;
+    // let sample_rate = SampleRate(44100.0);
+
+    // let raw = std::fs::read(args.in_file)?;
+    // let smf = midly::Smf::parse(&raw)?;
+
+    // let tempo_info = TempoInfo::new(&smf);
+    // let blocks = MidiBlocks::new(smf, sample_rate, block_size, tempo_info);
+
+    // let mut nyasynth = Nyasynth::default();
+    // let mut context = DebugContext;
+
+    // let audio_io_layout = Nyasynth::AUDIO_IO_LAYOUTS[0];
+    // let buffer_config = BufferConfig {
+    //     sample_rate: sample_rate.get(),
+    //     min_buffer_size: None,
+    //     max_buffer_size: block_size as u32,
+    //     process_mode: ProcessMode::Offline,
+    // };
+    // nyasynth.initialize(&audio_io_layout, &buffer_config, &mut context);
+    // {
+    //     let params = nyasynth.debug_params();
+    //     let param_setter = ParamSetter::new(&context);
+    //     {
+    //         param_setter.set_parameter(params.dbg_polycat(), args.polycat);
+    //         // set to 0.5s
+    //         param_setter.set_parameter(params.dbg_meow_decay(), 0.5);
+    //         // set to 40ms
+    //         param_setter.set_parameter(params.dbg_meow_release(), 40.0 / 1000.0);
+    //     }
+    // }
+
+    // // Set noise on.
+    // // params.set_parameter(8, 1.0);
+
+    // // Set vibrato amount
+    // // params.set_parameter(4, 1.0);
+
+    // // Set vibrato rate
+    // // params.set_parameter(6, 0.5);
+
+    // // Set chorus amount
+    // // params.set_parameter(9, 0.5);
+
+    // nyasynth.reset();
+
+    // let mut outputs: Vec<f32> = Vec::with_capacity(8_000_000);
+
+    // fn new_buffer<'a>() -> Buffer<'a> {
+    //     let buffer = Buffer::default();
+    //     buffer
+    // }
+
+    // for i in 0..(blocks.max_block() + 100) {
+    //     let block = blocks.get(i);
+    //     let mut context = DebugProcessContext::new(block, &tempo_info, sample_rate);
+    //     let mut buffer = new_buffer();
+    //     let mut aux = AuxiliaryBuffers {
+    //         inputs: &mut [],
+    //         outputs: &mut [],
+    //     };
+    //     // nyasynth.process_events(events_buffer.events());
+    //     nyasynth.process(&mut buffer, &mut aux, &mut context);
+
+    //     let output_left = &buffer.as_slice()[0];
+    //     outputs.extend_from_slice(output_left);
+    // }
+
+    // let mut out_file = std::fs::File::create(args.out_file)?;
+    // let header = wav::Header::new(wav::WAV_FORMAT_IEEE_FLOAT, 1, 44100, 32);
+    // wav::write(
+    //     header,
+    //     &wav::BitDepth::ThirtyTwoFloat(outputs),
+    //     &mut out_file,
+    // )?;
+    // Ok(())
 }
