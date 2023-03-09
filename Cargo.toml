@@ -32,3 +32,6 @@ debug = true
 
 [lib]
 crate-type = ["cdylib", "lib"]
+
+[workspace]
+members = ["xtask"]
