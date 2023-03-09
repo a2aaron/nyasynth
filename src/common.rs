@@ -66,20 +66,6 @@ impl Vel {
     }
 }
 
-impl From<wmidi::U7> for Vel {
-    fn from(value: wmidi::U7) -> Self {
-        Vel::new(normalize_u7(value))
-    }
-}
-
-/// Convert a U7 value into a normalized [0.0, 1.0] float.
-pub fn normalize_u7(num: wmidi::U7) -> f32 {
-    // A U7 in is in range [0, 127]
-    let num = wmidi::U7::data_to_bytes(&[num])[0];
-    // convert to f32 - range [0.0, 1.0]
-    num as f32 / 127.0
-}
-
 /// A wrapper struct representing a duration of seconds. This struct implements [std::ops::Div], so
 /// it's possible to divide a [Seconds] by another [Seconds] and get an [f32].
 #[derive(Debug, Clone, Copy, Add, Sub, From, PartialEq, Eq, PartialOrd, Ord)]
@@ -203,11 +189,6 @@ impl Hertz {
 
     pub fn clamp(&self, min: f32, max: f32) -> Hertz {
         Hertz(self.get().clamp(min, max))
-    }
-}
-impl From<wmidi::Note> for Hertz {
-    fn from(value: wmidi::Note) -> Self {
-        Hertz(value.to_freq_f32())
     }
 }
 

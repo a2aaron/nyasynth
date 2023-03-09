@@ -1094,7 +1094,6 @@ dependencies = [
 name = "nyasynth"
 version = "0.1.0"
 dependencies = [
- "backtrace",
  "biquad",
  "clap",
  "derive_more",
@@ -1102,9 +1101,7 @@ dependencies = [
  "midly",
  "nih_plug",
  "ordered-float",
- "variant_count",
  "wav",
- "wmidi",
 ]
 
 [[package]]
@@ -1616,16 +1613,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "variant_count"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aae2faf80ac463422992abf4de234731279c058aaf33171ca70277c98406b124"
-dependencies = [
- "quote",
- "syn",
-]
-
-[[package]]
 name = "version_check"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1905,12 +1892,6 @@ checksum = "ee7b2c67f962bf5042bfd8b6a916178df33a26eec343ae064cb8e069f638fa6f"
 dependencies = [
  "memchr",
 ]
-
-[[package]]
-name = "wmidi"
-version = "4.0.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b7ff057a07cdcca1dce95859fb6e205dc99a9bc526d72f3d724468a12aa74a5"
 
 [[package]]
 name = "x11"

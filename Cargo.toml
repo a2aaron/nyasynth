@@ -8,10 +8,7 @@ edition = "2021"
 
 [dependencies]
 nih_plug = { git = "https://github.com/robbert-vdh/nih-plug", features = ["vst3", "standalone"]}
-wmidi = "4.0.1"
-variant_count = "1.0.0"
 derive_more = "0.99"
-backtrace = "0.3"
 biquad = "0.4.0"
 ordered-float = "3.4.0"
 
