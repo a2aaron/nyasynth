@@ -1,7 +1,6 @@
 use crate::{
-    common::{Hertz, Note, Pitch, SampleRate, SampleTime, Seconds, Vel},
+    common::{Hertz, NormalizedPitchbend, Note, Pitch, SampleRate, SampleTime, Seconds, Vel},
     ease::lerp,
-    neighbor_pairs::NeighborPairsIter,
     params::{EnvelopeParams, MeowParameters},
 };
 
@@ -18,9 +17,6 @@ type FrameDelta = usize;
 
 /// A value in range [0.0, 1.0] which denotes the position wihtin a wave cycle.
 type Angle = f32;
-/// A pitchbend value in [-1.0, +1.0] range, where +1.0 means "max upward bend"
-/// and -1.0 means "max downward bend"
-pub type NormalizedPitchbend = f32;
 
 /// A small noise generator using xorshift.
 pub struct NoiseGenerator {
@@ -183,7 +179,7 @@ impl SoundGenerator {
         noise_generator: &mut NoiseGenerator,
         i: FrameDelta,
         sample_rate: SampleRate,
-        pitch_bend: f32,
+        pitch_bend: NormalizedPitchbend,
         vibrato_mod: f32,
     ) -> (f32, f32) {
         // Only advance time if the note is being held down.
@@ -389,7 +385,7 @@ impl OSCGroup {
         noise_generator: &mut NoiseGenerator,
         base_vel: Vel,
         base_note: Pitch,
-        pitch_bend: f32,
+        pitch_bend: NormalizedPitchbend,
         vibrato_mod: f32,
     ) -> f32 {
         let sample_rate = context.sample_rate;
@@ -404,7 +400,7 @@ impl OSCGroup {
         let total_volume = base_vel.raw * vol_env.max(0.0);
 
         let pitch_mod = {
-            let pitch_bend_mod = pitch_bend * (params.pitchbend_max as f32);
+            let pitch_bend_mod = pitch_bend.get() * (params.pitchbend_max as f32);
 
             // Both vibrato_mod and vibrato_env are in the 0.0-1.0 range. We multiply by two here to
             // allow the vibrato to modulate the pitch by up to two semitones.
@@ -739,49 +735,4 @@ impl NoteShape {
             }
         }
     }
-}
-
-/// Returns an iterator of size num_samples which linearly interpolates between the
-/// points specified by pitch_bend. last_pitch_bend is assumed to be the "-1th"
-/// value and is used as the starting point.
-/// Thank you to Cassie for this code!
-pub fn to_pitch_envelope(
-    pitch_bend: &[(f32, i32)],
-    prev_pitch_bend: f32,
-    num_samples: usize,
-) -> (impl Iterator<Item = f32> + '_, f32) {
-    // Linearly interpolate over num values
-    fn interpolate_n(start: f32, end: f32, num: usize) -> impl Iterator<Item = f32> {
-        (0..num).map(move |i| lerp(start, end, i as f32 / num as f32))
-    }
-
-    // We first make the first and last points to interpolate over. The first
-    // point is just prev_pitch_bend, and the last point either gets the value
-    // of the last point in pitch_bend, or just prev_pitch_bend if pitch_bend
-    // is empty. If pitch_bend is nonempty, this means that the last "segment"
-    // is constant value, which is okay since we can't see into the future
-    // TODO: Use linear extrapolation for the last segment.
-    let first = Some((prev_pitch_bend, 0));
-
-    let last_bend = pitch_bend
-        .last()
-        .map(|&(bend, _)| bend)
-        .unwrap_or(prev_pitch_bend);
-    let last = Some((last_bend, num_samples as i32));
-
-    // Now we make a list of points, starting with the first point, then all of
-    // pitch_bend, then the last point
-    let iter = first
-        .into_iter()
-        .chain(pitch_bend.iter().copied())
-        .chain(last)
-        // Make it a NeighborPairs so we can get the current point and the next point
-        .neighbor_pairs()
-        // Then interpolate the elements.
-        .flat_map(|((start, a), (end, b))| {
-            let num = b - a;
-            interpolate_n(start, end, num as usize)
-        });
-
-    (iter, last_bend)
 }

@@ -1,6 +1,7 @@
 use biquad::ToHertz;
 use derive_more::{Add, From, Into, Sub};
 use nih_plug::{
+    nih_debug_assert,
     prelude::{Enum, FloatRange},
     util::midi_note_to_freq,
 };
@@ -8,6 +9,7 @@ use ordered_float::OrderedFloat;
 
 use crate::{
     ease::{ease_in_expo, lerp, Easing},
+    neighbor_pairs::NeighborPairsIter,
     sound_gen::EnvelopeType,
 };
 
@@ -218,6 +220,77 @@ impl std::ops::Div<Hertz> for Hertz {
     type Output = f32;
     fn div(self, rhs: Hertz) -> Self::Output {
         self.0 / rhs.0
+    }
+}
+
+/// A pitchbend value in [-1.0, +1.0] range, where +1.0 means "max upward bend"
+/// and -1.0 means "max downward bend"
+#[derive(Debug, Clone, Copy, From, Into)]
+pub struct NormalizedPitchbend(f32);
+
+impl NormalizedPitchbend {
+    pub fn new(value: f32) -> NormalizedPitchbend {
+        NormalizedPitchbend(value)
+    }
+
+    pub fn get(&self) -> f32 {
+        self.0
+    }
+
+    /// Convert a pitchbend value that is in the range [0.0, 1.0] to a NormalizedPitchbend.
+    /// The pitchbend value is assumed such that 0.5 is considered to be "no bend", 0.0 is "max
+    /// downward bend", and 1.0 is "max upward bend".
+    pub fn from_zero_one_range(value: f32) -> NormalizedPitchbend {
+        nih_debug_assert!(0.0 <= value && value <= 1.0);
+        NormalizedPitchbend((value * 2.0) - 1.0)
+    }
+
+    /// Returns an iterator of size num_samples which linearly interpolates between the
+    /// points specified by pitch_bend. last_pitch_bend is assumed to be the "-1th"
+    /// value and is used as the starting point.
+    /// Thank you to Cassie for this code!
+    pub fn to_pitch_envelope(
+        pitch_bend: &[(NormalizedPitchbend, i32)],
+        prev_pitch_bend: NormalizedPitchbend,
+        num_samples: usize,
+    ) -> (
+        impl Iterator<Item = NormalizedPitchbend> + '_,
+        NormalizedPitchbend,
+    ) {
+        // Linearly interpolate over num values
+        fn interpolate_n(start: f32, end: f32, num: usize) -> impl Iterator<Item = f32> {
+            (0..num).map(move |i| lerp(start, end, i as f32 / num as f32))
+        }
+
+        // We first make the first and last points to interpolate over. The first
+        // point is just prev_pitch_bend, and the last point either gets the value
+        // of the last point in pitch_bend, or just prev_pitch_bend if pitch_bend
+        // is empty. If pitch_bend is nonempty, this means that the last "segment"
+        // is constant value, which is okay since we can't see into the future
+        // TODO: Use linear extrapolation for the last segment.
+        let first = Some((prev_pitch_bend, 0));
+
+        let last_bend = pitch_bend
+            .last()
+            .map(|&(bend, _)| bend)
+            .unwrap_or(prev_pitch_bend);
+        let last = Some((last_bend, num_samples as i32));
+
+        // Now we make a list of points, starting with the first point, then all of
+        // pitch_bend, then the last point
+        let iter = first
+            .into_iter()
+            .chain(pitch_bend.iter().copied())
+            .chain(last)
+            // Make it a NeighborPairs so we can get the current point and the next point
+            .neighbor_pairs()
+            // Then interpolate the elements.
+            .flat_map(|((start, a), (end, b))| {
+                let num = b - a;
+                interpolate_n(start.0, end.0, num as usize).map(|x| NormalizedPitchbend(x))
+            });
+
+        (iter, last_bend)
     }
 }
 

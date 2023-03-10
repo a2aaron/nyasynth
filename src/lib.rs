@@ -12,16 +12,13 @@ mod sound_gen;
 use std::sync::Arc;
 
 use chorus::Chorus;
-use common::{Note, SampleRate, Vel};
+use common::{NormalizedPitchbend, Note, SampleRate, Vel};
 use ease::lerp;
 use keys::KeyTracker;
 use nih_plug::{nih_export_vst3, prelude::*};
 use params::{MeowParameters, Parameters};
 
-use sound_gen::{
-    to_pitch_envelope, NoiseGenerator, NormalizedPitchbend, Oscillator, SoundGenerator,
-    RETRIGGER_TIME,
-};
+use sound_gen::{NoiseGenerator, Oscillator, SoundGenerator, RETRIGGER_TIME};
 
 /// The main plugin struct.
 pub struct Nyasynth {
@@ -135,7 +132,7 @@ impl Default for Nyasynth {
             notes: Vec::with_capacity(16),
             pitch_bend: Vec::with_capacity(16),
             key_tracker: KeyTracker::new(),
-            last_pitch_bend: 0.0,
+            last_pitch_bend: NormalizedPitchbend::new(0.0),
             vibrato_lfo: Oscillator::new(),
             chorus: Chorus::new(sample_rate),
             noise_generator: NoiseGenerator::new(),
@@ -158,11 +155,14 @@ impl Nyasynth {
         let num_samples = buffer.samples();
 
         // Get the envelope from MIDI pitch bend
-        let (pitch_bends, last_bend) =
-            to_pitch_envelope(&self.pitch_bend, self.last_pitch_bend, num_samples);
+        let (pitch_bends, last_bend) = NormalizedPitchbend::to_pitch_envelope(
+            &self.pitch_bend,
+            self.last_pitch_bend,
+            num_samples,
+        );
         self.last_pitch_bend = last_bend;
 
-        let pitch_bends: Vec<f32> = pitch_bends.collect();
+        let pitch_bends: Vec<_> = pitch_bends.collect();
 
         // Get sound for each note
         let (left_out, right_out) = &mut buffer.as_slice().split_at_mut(1);
@@ -333,7 +333,8 @@ impl Nyasynth {
                     }
                 }
                 NoteEvent::MidiPitchBend { value, .. } => {
-                    self.pitch_bend.push(((value * 2.0) - 1.0, frame_delta));
+                    self.pitch_bend
+                        .push((NormalizedPitchbend::from_zero_one_range(value), frame_delta));
                 }
                 _ => (),
             }
