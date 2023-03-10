@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use nih_plug::prelude::{
-    BoolParam, Enum, EnumParam, FloatParam, FloatRange, IntParam, IntRange, Params,
+    BoolParam, Enum, EnumParam, FloatParam, FloatRange, IntParam, IntRange, Param, Params,
 };
 
 use crate::common::{self, Decibel, Seconds};
@@ -17,7 +17,7 @@ const DEFAULT_MASTER_VOL: Decibel = Decibel::from_db(-6.0);
 const DEFAULT_MEOW_ATTACK: Seconds = Seconds::new(30.0 / 1000.0);
 const DEFAULT_MEOW_DECAY: Seconds = Seconds::new(1.25);
 const DEFAULT_MEOW_SUSTAIN: Decibel = Decibel::from_db(-15.0);
-const DEFAULT_MEOW_RELEASE: Seconds = Seconds::new(400.0 / 1000.0);
+const DEFAULT_MEOW_RELEASE: Seconds = Seconds::new(490.0 / 1000.0);
 
 const DEFAULT_VIBRATO_AMOUNT: f32 = 0.0;
 const DEFAULT_VIBRATO_ATTACK: Seconds = Seconds::new(0.0);
@@ -119,7 +119,7 @@ impl MeowParameters {
             vol_envelope: VolumeEnvelopeParams {
                 attack: seconds(meow_attack),
                 decay: seconds(meow_decay),
-                sustain: meow_sustain.value(),
+                sustain: meow_sustain.modulated_normalized_value(),
                 release: seconds(meow_release),
             },
             filter: FilterParams {
@@ -131,7 +131,7 @@ impl MeowParameters {
             filter_envelope: FilterEnvelopeParams {
                 attack: seconds(meow_attack),
                 decay: seconds(meow_decay),
-                sustain: meow_sustain.value(),
+                sustain: meow_sustain.modulated_normalized_value(),
                 release: seconds(meow_release),
                 env_mod: hertz(filter_envlope_mod),
             },
@@ -222,9 +222,9 @@ impl Parameters {
     pub fn new() -> Parameters {
         fn polycat_formatter(value: bool) -> String {
             if value {
-                "Off".to_string()
-            } else {
                 "On".to_string()
+            } else {
+                "Off".to_string()
             }
         }
 
@@ -244,7 +244,7 @@ impl Parameters {
             let range = FloatRange::Skewed {
                 min,
                 max,
-                factor: 6.0,
+                factor: FloatRange::skew_factor(-2.0),
             };
             FloatParam::new(name, default.get(), range).with_value_to_string(Arc::new(formatter))
         }

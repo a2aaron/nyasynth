@@ -64,7 +64,7 @@ impl Plugin for Nyasynth {
         names: PortNames::const_default(),
     }];
 
-    const MIDI_INPUT: MidiConfig = MidiConfig::Basic;
+    const MIDI_INPUT: MidiConfig = MidiConfig::MidiCCs;
     const MIDI_OUTPUT: MidiConfig = MidiConfig::None;
 
     const SAMPLE_ACCURATE_AUTOMATION: bool = false;
@@ -76,9 +76,9 @@ impl Plugin for Nyasynth {
         buffer_config: &BufferConfig,
         context: &mut impl InitContext<Self>,
     ) -> bool {
-        // std::env::set_var("NIH_LOG", "/Users/aaron/dev/Rust/nyasynth/nyasynth_nih.log");
         nih_plug::wrapper::setup_logger();
-
+        std::env::set_var("NIH_LOG", "/Users/aaron/dev/Rust/nyasynth/nyasynth_nih.log");
+        nih_log!("Initalizing VST...");
         // On a retrigger, the next note is delayed by RETRIGGER_TIME. Hence, there is a latency
         // of RETRIGGER_TIME. Note that this latency doesn't exist for non-retriggered notes.
         context.set_latency_samples(RETRIGGER_TIME as u32);
@@ -333,9 +333,9 @@ impl Nyasynth {
                     }
                 }
                 NoteEvent::MidiPitchBend { value, .. } => {
-                    self.pitch_bend.push((value, frame_delta));
+                    self.pitch_bend.push(((value * 2.0) - 1.0, frame_delta));
                 }
-                _ => todo!(),
+                _ => (),
             }
         }
 
