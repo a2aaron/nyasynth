@@ -7,7 +7,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-nih_plug = { git = "https://github.com/robbert-vdh/nih-plug", features = ["vst3", "standalone"]}
+nih_plug = { git = "https://github.com/a2aaron/nih-plug.git", rev = "d380c15f8b3047ebe8156884a6afbd3221f1ca79", features = ["vst3", "standalone"]}
 derive_more = "0.99"
 biquad = "0.4.0"
 ordered-float = "3.4.0"
