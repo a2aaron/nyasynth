@@ -208,7 +208,9 @@ fn to_vst_event(channel: midly::num::u4, midi_event: midly::MidiMessage) -> VstE
         midly::MidiMessage::PitchBend { bend } => NoteEvent::MidiPitchBend {
             timing: 0,
             channel,
-            value: bend.as_f32(),
+            // Note: midly pitchbend values are in the range [-1.0, 1.0]
+            // but nih-plug's pitchbend values are in the range [0.0, 1.0]
+            value: (bend.as_f32() + 1.0) / 2.0,
         },
     }
 }
