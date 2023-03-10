@@ -345,6 +345,7 @@ struct OSCGroup {
     // The state for the EQ/filters, applied after the signal is generated
     filter: DirectForm1<f32>,
     filter_env: Envelope<f32>,
+    sample_counter: usize,
 }
 
 impl OSCGroup {
@@ -363,6 +364,7 @@ impl OSCGroup {
                 )
                 .unwrap(),
             ),
+            sample_counter: 0,
         }
     }
 
@@ -445,15 +447,17 @@ impl OSCGroup {
             // avoids blowing out the speakers.
             let cutoff_freq = cutoff_freq.clamp(20.0, sample_rate.0 * 0.99 / 2.0);
 
-            let coefficents = biquad::Coefficients::<f32>::from_params(
-                filter.filter_type,
-                sample_rate.hz(),
-                cutoff_freq.into(),
-                filter.q_value.max(0.0),
-            )
-            .unwrap();
+            if self.sample_counter % 16 == 0 {
+                let coefficents = biquad::Coefficients::<f32>::from_params(
+                    filter.filter_type,
+                    sample_rate.hz(),
+                    cutoff_freq.into(),
+                    filter.q_value.max(0.0),
+                )
+                .unwrap();
+                self.filter.update_coefficients(coefficents);
+            }
 
-            self.filter.update_coefficients(coefficents);
             let output = self.filter.run(value);
             if output.is_finite() {
                 lerp(value, output, params.filter.dry_wet)
@@ -465,7 +469,7 @@ impl OSCGroup {
                 value
             }
         };
-
+        self.sample_counter += 1;
         value * total_volume
     }
 
