@@ -1,5 +1,5 @@
 use crate::{
-    common::{Hertz, NormalizedPitchbend, Note, Pitch, SampleRate, SampleTime, Seconds, Vel},
+    common::{Hertz, Note, Pitch, Pitchbend, SampleRate, SampleTime, Seconds, Vel},
     ease::lerp,
     params::{EnvelopeParams, MeowParameters},
 };
@@ -179,7 +179,7 @@ impl SoundGenerator {
         noise_generator: &mut NoiseGenerator,
         i: FrameDelta,
         sample_rate: SampleRate,
-        pitch_bend: NormalizedPitchbend,
+        pitch_bend: Pitchbend,
         vibrato_mod: f32,
     ) -> (f32, f32) {
         // Only advance time if the note is being held down.
@@ -385,7 +385,7 @@ impl OSCGroup {
         noise_generator: &mut NoiseGenerator,
         base_vel: Vel,
         base_note: Pitch,
-        pitch_bend: NormalizedPitchbend,
+        pitch_bend: Pitchbend,
         vibrato_mod: f32,
     ) -> f32 {
         let sample_rate = context.sample_rate;

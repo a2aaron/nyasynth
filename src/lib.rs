@@ -12,7 +12,7 @@ mod sound_gen;
 use std::sync::Arc;
 
 use chorus::Chorus;
-use common::{NormalizedPitchbend, Note, SampleRate, Vel};
+use common::{Note, Pitchbend, SampleRate, Vel};
 use ease::lerp;
 use keys::KeyTracker;
 use nih_plug::{nih_export_vst3, prelude::*};
@@ -29,9 +29,9 @@ pub struct Nyasynth {
     /// Pitchbend messages. Format is (value, frame_delta) where
     /// value is a normalized f32 and frame_delta is the offset into the current
     /// frame for which the pitchbend value occurs
-    pitch_bend: Vec<(NormalizedPitchbend, i32)>,
+    pitch_bend: Vec<(Pitchbend, i32)>,
     /// The last pitch bend value from the previous frame.
-    last_pitch_bend: NormalizedPitchbend,
+    last_pitch_bend: Pitchbend,
     key_tracker: KeyTracker,
     // The vibrato LFO is global--the vibrato amount is shared across all generators, although each
     // generator gets it's own vibrato envelope.
@@ -132,7 +132,7 @@ impl Default for Nyasynth {
             notes: Vec::with_capacity(16),
             pitch_bend: Vec::with_capacity(16),
             key_tracker: KeyTracker::new(),
-            last_pitch_bend: NormalizedPitchbend::new(0.0),
+            last_pitch_bend: Pitchbend::new(0.0),
             vibrato_lfo: Oscillator::new(),
             chorus: Chorus::new(sample_rate),
             noise_generator: NoiseGenerator::new(),
@@ -155,11 +155,8 @@ impl Nyasynth {
         let num_samples = buffer.samples();
 
         // Get the envelope from MIDI pitch bend
-        let (pitch_bends, last_bend) = NormalizedPitchbend::to_pitch_envelope(
-            &self.pitch_bend,
-            self.last_pitch_bend,
-            num_samples,
-        );
+        let (pitch_bends, last_bend) =
+            Pitchbend::to_pitch_envelope(&self.pitch_bend, self.last_pitch_bend, num_samples);
         self.last_pitch_bend = last_bend;
 
         let pitch_bends: Vec<_> = pitch_bends.collect();
@@ -334,7 +331,7 @@ impl Nyasynth {
                 }
                 NoteEvent::MidiPitchBend { value, .. } => {
                     self.pitch_bend
-                        .push((NormalizedPitchbend::from_zero_one_range(value), frame_delta));
+                        .push((Pitchbend::from_zero_one_range(value), frame_delta));
                 }
                 _ => (),
             }

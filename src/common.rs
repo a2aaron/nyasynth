@@ -226,11 +226,11 @@ impl std::ops::Div<Hertz> for Hertz {
 /// A pitchbend value in [-1.0, +1.0] range, where +1.0 means "max upward bend"
 /// and -1.0 means "max downward bend"
 #[derive(Debug, Clone, Copy, From, Into)]
-pub struct NormalizedPitchbend(f32);
+pub struct Pitchbend(f32);
 
-impl NormalizedPitchbend {
-    pub fn new(value: f32) -> NormalizedPitchbend {
-        NormalizedPitchbend(value)
+impl Pitchbend {
+    pub fn new(value: f32) -> Pitchbend {
+        Pitchbend(value)
     }
 
     pub fn get(&self) -> f32 {
@@ -240,9 +240,9 @@ impl NormalizedPitchbend {
     /// Convert a pitchbend value that is in the range [0.0, 1.0] to a NormalizedPitchbend.
     /// The pitchbend value is assumed such that 0.5 is considered to be "no bend", 0.0 is "max
     /// downward bend", and 1.0 is "max upward bend".
-    pub fn from_zero_one_range(value: f32) -> NormalizedPitchbend {
+    pub fn from_zero_one_range(value: f32) -> Pitchbend {
         nih_debug_assert!(0.0 <= value && value <= 1.0);
-        NormalizedPitchbend((value * 2.0) - 1.0)
+        Pitchbend((value * 2.0) - 1.0)
     }
 
     /// Returns an iterator of size num_samples which linearly interpolates between the
@@ -250,13 +250,10 @@ impl NormalizedPitchbend {
     /// value and is used as the starting point.
     /// Thank you to Cassie for this code!
     pub fn to_pitch_envelope(
-        pitch_bend: &[(NormalizedPitchbend, i32)],
-        prev_pitch_bend: NormalizedPitchbend,
+        pitch_bend: &[(Pitchbend, i32)],
+        prev_pitch_bend: Pitchbend,
         num_samples: usize,
-    ) -> (
-        impl Iterator<Item = NormalizedPitchbend> + '_,
-        NormalizedPitchbend,
-    ) {
+    ) -> (impl Iterator<Item = Pitchbend> + '_, Pitchbend) {
         // Linearly interpolate over num values
         fn interpolate_n(start: f32, end: f32, num: usize) -> impl Iterator<Item = f32> {
             (0..num).map(move |i| lerp(start, end, i as f32 / num as f32))
@@ -287,7 +284,7 @@ impl NormalizedPitchbend {
             // Then interpolate the elements.
             .flat_map(|((start, a), (end, b))| {
                 let num = b - a;
-                interpolate_n(start.0, end.0, num as usize).map(|x| NormalizedPitchbend(x))
+                interpolate_n(start.0, end.0, num as usize).map(|x| Pitchbend(x))
             });
 
         (iter, last_bend)
