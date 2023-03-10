@@ -258,13 +258,8 @@ impl GuiContext for DebugContext {
 
     unsafe fn raw_begin_set_parameter(&self, _param: ParamPtr) {}
 
-    unsafe fn raw_set_parameter_normalized(&self, param: ParamPtr, _normalized: f32) {
-        match param {
-            ParamPtr::FloatParam(_param) => todo!(),
-            ParamPtr::IntParam(_) => todo!(),
-            ParamPtr::BoolParam(_) => todo!(),
-            ParamPtr::EnumParam(_) => todo!(),
-        }
+    unsafe fn raw_set_parameter_normalized(&self, param: ParamPtr, normalized: f32) {
+        param.set_normalized_value(normalized);
     }
 
     unsafe fn raw_end_set_parameter(&self, _param: ParamPtr) {}
@@ -292,7 +287,7 @@ impl DebugProcessContext {
     ) -> DebugProcessContext {
         let tempo = tempo_info.beats_per_minute();
         let sample_rate = sample_rate.get();
-        let mut transport: Transport = todo!();
+        let mut transport: Transport = Transport::new(sample_rate);
         transport.tempo = Some(tempo);
         DebugProcessContext {
             events,
@@ -330,8 +325,6 @@ impl ProcessContext<Nyasynth> for DebugProcessContext {
 
 #[derive(Debug, Parser)]
 struct Args {
-    #[arg(short, long = "vst")]
-    vst_path: PathBuf,
     #[arg(short, long = "in")]
     in_file: PathBuf,
     #[arg(short, long = "out")]
@@ -341,40 +334,38 @@ struct Args {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    nih_plug::prelude::nih_export_standalone::<Nyasynth>();
-    Ok(())
-    // let args = Args::parse();
-    // let block_size = 1024;
-    // let sample_rate = SampleRate(44100.0);
+    let args = Args::parse();
+    let block_size = 1024;
+    let sample_rate = SampleRate(44100.0);
 
-    // let raw = std::fs::read(args.in_file)?;
-    // let smf = midly::Smf::parse(&raw)?;
+    let raw = std::fs::read(args.in_file)?;
+    let smf = midly::Smf::parse(&raw)?;
 
-    // let tempo_info = TempoInfo::new(&smf);
-    // let blocks = MidiBlocks::new(smf, sample_rate, block_size, tempo_info);
+    let tempo_info = TempoInfo::new(&smf);
+    let blocks = MidiBlocks::new(smf, sample_rate, block_size, tempo_info);
 
-    // let mut nyasynth = Nyasynth::default();
-    // let mut context = DebugContext;
+    let mut nyasynth = Nyasynth::default();
+    let mut context = DebugContext;
 
-    // let audio_io_layout = Nyasynth::AUDIO_IO_LAYOUTS[0];
-    // let buffer_config = BufferConfig {
-    //     sample_rate: sample_rate.get(),
-    //     min_buffer_size: None,
-    //     max_buffer_size: block_size as u32,
-    //     process_mode: ProcessMode::Offline,
-    // };
-    // nyasynth.initialize(&audio_io_layout, &buffer_config, &mut context);
-    // {
-    //     let params = nyasynth.debug_params();
-    //     let param_setter = ParamSetter::new(&context);
-    //     {
-    //         param_setter.set_parameter(params.dbg_polycat(), args.polycat);
-    //         // set to 0.5s
-    //         param_setter.set_parameter(params.dbg_meow_decay(), 0.5);
-    //         // set to 40ms
-    //         param_setter.set_parameter(params.dbg_meow_release(), 40.0 / 1000.0);
-    //     }
-    // }
+    let audio_io_layout = Nyasynth::AUDIO_IO_LAYOUTS[0];
+    let buffer_config = BufferConfig {
+        sample_rate: sample_rate.get(),
+        min_buffer_size: None,
+        max_buffer_size: block_size as u32,
+        process_mode: ProcessMode::Offline,
+    };
+    nyasynth.initialize(&audio_io_layout, &buffer_config, &mut context);
+    {
+        let params = nyasynth.debug_params();
+        let param_setter = ParamSetter::new(&context);
+        {
+            param_setter.set_parameter(params.dbg_polycat(), args.polycat);
+            // set to 0.5s
+            param_setter.set_parameter(params.dbg_meow_decay(), 0.5);
+            // set to 40ms
+            param_setter.set_parameter(params.dbg_meow_release(), 40.0 / 1000.0);
+        }
+    }
 
     // // Set noise on.
     // // params.set_parameter(8, 1.0);
@@ -388,36 +379,44 @@ fn main() -> Result<(), Box<dyn Error>> {
     // // Set chorus amount
     // // params.set_parameter(9, 0.5);
 
-    // nyasynth.reset();
+    nyasynth.reset();
 
-    // let mut outputs: Vec<f32> = Vec::with_capacity(8_000_000);
+    let mut outputs: Vec<f32> = Vec::with_capacity(8_000_000);
 
-    // fn new_buffer<'a>() -> Buffer<'a> {
-    //     let buffer = Buffer::default();
-    //     buffer
-    // }
+    fn new_buffer<'a>(backing_buffer: &'a mut [Vec<f32>]) -> Buffer<'a> {
+        let num_samples = backing_buffer[0].len();
+        let mut buffer = Buffer::default();
+        unsafe {
+            buffer.set_slices(num_samples, move |output_slices| {
+                let (first_channel, other_channels) = backing_buffer.split_at_mut(1);
+                *output_slices = vec![&mut first_channel[0], &mut other_channels[0]];
+            });
+        }
+        buffer
+    }
 
-    // for i in 0..(blocks.max_block() + 100) {
-    //     let block = blocks.get(i);
-    //     let mut context = DebugProcessContext::new(block, &tempo_info, sample_rate);
-    //     let mut buffer = new_buffer();
-    //     let mut aux = AuxiliaryBuffers {
-    //         inputs: &mut [],
-    //         outputs: &mut [],
-    //     };
-    //     // nyasynth.process_events(events_buffer.events());
-    //     nyasynth.process(&mut buffer, &mut aux, &mut context);
+    let mut backing_buffer = vec![vec![0.0; block_size]; 2];
+    for i in 0..(blocks.max_block() + 100) {
+        let block = blocks.get(i);
+        let mut context = DebugProcessContext::new(block, &tempo_info, sample_rate);
+        let mut buffer = new_buffer(&mut backing_buffer);
+        let mut aux = AuxiliaryBuffers {
+            inputs: &mut [],
+            outputs: &mut [],
+        };
+        // nyasynth.process_events(events_buffer.events());
+        nyasynth.process(&mut buffer, &mut aux, &mut context);
 
-    //     let output_left = &buffer.as_slice()[0];
-    //     outputs.extend_from_slice(output_left);
-    // }
+        let output_left = &buffer.as_slice()[0];
+        outputs.extend_from_slice(output_left);
+    }
 
-    // let mut out_file = std::fs::File::create(args.out_file)?;
-    // let header = wav::Header::new(wav::WAV_FORMAT_IEEE_FLOAT, 1, 44100, 32);
-    // wav::write(
-    //     header,
-    //     &wav::BitDepth::ThirtyTwoFloat(outputs),
-    //     &mut out_file,
-    // )?;
-    // Ok(())
+    let mut out_file = std::fs::File::create(args.out_file)?;
+    let header = wav::Header::new(wav::WAV_FORMAT_IEEE_FLOAT, 1, 44100, 32);
+    wav::write(
+        header,
+        &wav::BitDepth::ThirtyTwoFloat(outputs),
+        &mut out_file,
+    )?;
+    Ok(())
 }
