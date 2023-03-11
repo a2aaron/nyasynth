@@ -6,6 +6,14 @@ use crate::{
 
 use biquad::{Biquad, DirectForm1, ToHertz, Q_BUTTERWORTH_F32};
 use nih_plug::prelude::Enum;
+use std::simd::Simd;
+
+/// Simd f32
+#[allow(non_camel_case_types)]
+type f32s = Simd<f32, SIMD_SIZE>;
+
+/// The size, in lanes, of the f32s type. Valid values are 2, 4, 8, and 16.
+const SIMD_SIZE: usize = 64;
 
 const TAU: f32 = std::f32::consts::TAU;
 
@@ -475,6 +483,103 @@ impl OSCGroup {
         value * total_volume
     }
 
+    fn next_samples_simd(
+        &mut self,
+        params: &MeowParameters,
+        filter_sweep: FilterSweeper,
+        context: NoteContext,
+        noise_generator: &mut NoiseGenerator,
+        base_vel: Vel,
+        base_note: Pitch,
+        pitch_bend: Pitchbend,
+        vibrato_mod: f32,
+    ) -> f32s {
+        let sample_rate = context.sample_rate;
+
+        // Compute volume from parameters
+        let vol_env = {
+            // Easing computed somewhat empirically.
+            // See https://www.desmos.com/calculator/r7k5ee8k5j for details.
+            let x = self.vol_env.get(&params.vol_envelope, context);
+            (x * x * x + x) / 2.0
+        };
+        let total_volume = base_vel.raw * vol_env.max(0.0);
+
+        let pitch_mod = {
+            let pitch_bend_mod = pitch_bend.get() * (params.pitchbend_max as f32);
+
+            // Both vibrato_mod and vibrato_env are in the 0.0-1.0 range. We multiply by two here to
+            // allow the vibrato to modulate the pitch by up to two semitones.
+            let vibrato_env = self.vibrato_env.get(&params.vibrato_attack, context);
+            let vibrato_mod = vibrato_mod * vibrato_env * 2.0;
+
+            // Given any note, the note a single semitone away is 2^1/12 times the original note
+            // So (2^1/12)^n = 2^(n/12) is n semitones away.
+            Pitch((vibrato_mod + pitch_bend_mod) / 12.0)
+        };
+
+        // Note that we can just add these values together. This is because base_note and pitch_mod
+        // are in the same linear space (specifically: +1.0 maps to one octave, which happens because
+        // converting to and from Hertz uses exp2 and log2).
+        let pitch = (base_note + pitch_mod).into_hertz();
+
+        // TODO: This will be incorrect if the note is doing portamento or pitchbend or vibrato
+        // since obviously the note's pitch will be changing across the block.
+        // Get next sample
+        let mut values = self.osc.next_sample_simd(sample_rate, pitch.get());
+        values.as_mut_array().iter_mut().for_each(|out_value| {
+            let value = *out_value;
+            // Apply noise, if the noise is turned on.
+            let value = if params.noise_mix > 0.01 {
+                let noise = noise_generator.next();
+                value + noise * params.noise_mix
+            } else {
+                value
+            };
+
+            // Apply filter
+            let value = {
+                // Only update the filter once every 16 samples (reduces expensive
+                // biquad::Coefficients::from_params calls without reducing sound quality much.)
+                if self.sample_counter % 16 == 0 {
+                    let filter = &params.filter;
+                    // TODO: investigate if this is correct
+                    let filter_env = self.filter_env.get(&params.filter_envelope, context);
+
+                    let cutoff_freq = filter_sweep.lerp(filter_env);
+
+                    // avoid numerical instability encountered at very low
+                    // or high frequencies. Clamping at around 20 Hz also
+                    // avoids blowing out the speakers.
+                    let cutoff_freq = cutoff_freq.clamp(20.0, sample_rate.0 * 0.99 / 2.0);
+
+                    let coefficents = biquad::Coefficients::<f32>::from_params(
+                        filter.filter_type,
+                        sample_rate.hz(),
+                        cutoff_freq.into(),
+                        filter.q_value.max(0.0),
+                    )
+                    .unwrap();
+                    self.filter.update_coefficients(coefficents);
+                }
+
+                let output = self.filter.run(value);
+                if output.is_finite() {
+                    lerp(value, output, params.filter.dry_wet)
+                } else {
+                    // If the output happens to be NaN or Infinity, output the
+                    // original  signal instead. Hopefully, this will "reset"
+                    // the filter on the next sample, instead of being filled
+                    // with garbage values.
+                    value
+                }
+            };
+            self.sample_counter += 1;
+            *out_value = value;
+        });
+        values * f32s::splat(total_volume)
+    }
+
     /// Handle hold-to-release and release-to-retrigger state transitions
     fn note_state_changed(&mut self, edge: NoteStateEdge) {
         match edge {
@@ -549,6 +654,35 @@ impl Oscillator {
         let angle_delta = pitch.get() / sample_rate.get();
         // Similary, compute (self.angle + angle_delta) % 1.0 without actually calling fmod
         self.angle = (self.angle + angle_delta).fract();
+
+        value
+    }
+
+    /// Compute the next SIMD_SIZE samples. The pitch and sample rate is assumed to be constant
+    /// across all of the samples.
+    pub fn next_sample_simd(&mut self, sample_rate: SampleRate, pitch: f32) -> f32s {
+        // do you wanna play a game? produces a sawtooth shape in range [-1.0, 1.0]. All angle
+        // values must be in the [0.0, 1.0] range.
+        fn saw(angle: f32s) -> f32s {
+            f32s::splat(2.0) * angle - f32s::splat(1.0)
+        }
+
+        // Delta for single sample. Here, we assume that the pitch across the entire block is constant
+        // This is not true for samples during portamento.
+        let delta = pitch / sample_rate.get();
+
+        // This weird constant is to allow easily chaning SIMD_SIZE to a different value
+        const MULTIPLES: [f32; 16] = [
+            0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0,
+        ];
+        // We multiply our delta by 0, 1, 2, 3, etc since each angle needs to be advanced by N samples
+        let deltas = f32s::splat(delta) * f32s::from_slice(&MULTIPLES);
+
+        // Compute the actual sawtooth values.
+        let value = saw(f32s::splat(self.angle) + deltas);
+
+        // We processed SIMD_SIZE samples, so advance the angle by SIMD_SIZE * delta
+        self.angle = (self.angle + delta * SIMD_SIZE as f32).fract();
 
         value
     }

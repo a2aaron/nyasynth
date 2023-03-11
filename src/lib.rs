@@ -1,5 +1,6 @@
 #![feature(trait_alias)]
 #![feature(anonymous_lifetime_in_impl_trait)]
+#![feature(portable_simd)]
 
 mod chorus;
 pub mod common;

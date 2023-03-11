@@ -21,6 +21,7 @@ midly = "0.5.3"
 wav = "1.0.0"
 clap = { version = "4.1.8", features = ["derive"] }
 getrandom = "0.2.8"
+packed_simd_2 = "0.3.8"
 
 
 [profile.release]
