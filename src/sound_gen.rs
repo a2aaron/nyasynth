@@ -436,18 +436,20 @@ impl OSCGroup {
 
         // Apply filter
         let value = {
-            let filter = &params.filter;
-            // TODO: investigate if this is correct
-            let filter_env = self.filter_env.get(&params.filter_envelope, context);
-
-            let cutoff_freq = filter_sweep.lerp(filter_env);
-
-            // avoid numerical instability encountered at very low
-            // or high frequencies. Clamping at around 20 Hz also
-            // avoids blowing out the speakers.
-            let cutoff_freq = cutoff_freq.clamp(20.0, sample_rate.0 * 0.99 / 2.0);
-
+            // Only update the filter once every 16 samples (reduces expensive
+            // biquad::Coefficients::from_params calls without reducing sound quality much.)
             if self.sample_counter % 16 == 0 {
+                let filter = &params.filter;
+                // TODO: investigate if this is correct
+                let filter_env = self.filter_env.get(&params.filter_envelope, context);
+
+                let cutoff_freq = filter_sweep.lerp(filter_env);
+
+                // avoid numerical instability encountered at very low
+                // or high frequencies. Clamping at around 20 Hz also
+                // avoids blowing out the speakers.
+                let cutoff_freq = cutoff_freq.clamp(20.0, sample_rate.0 * 0.99 / 2.0);
+
                 let coefficents = biquad::Coefficients::<f32>::from_params(
                     filter.filter_type,
                     sample_rate.hz(),
