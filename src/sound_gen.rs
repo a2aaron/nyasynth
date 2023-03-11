@@ -732,9 +732,9 @@ impl NoteShape {
             NoteShape::Triangle => {
                 // Otherwise, compute a triangle/skewed triangle shape.
                 if angle < 0.5 {
-                    (angle) - 1.0
+                    4.0 * angle - 1.0
                 } else {
-                    -(2.0 * angle - 1.0) / (0.5) + 1.0
+                    -4.0 * angle + 3.0
                 }
             }
         }
