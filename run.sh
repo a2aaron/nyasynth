@@ -1,10 +1,3 @@
-# pkill "vPlayer 3"
-# trash Nyasynth.vst
-# cargo build --release
-# bash ./osx_bundler.sh Nyasynth target/release/libnyasynth.dylib
-# open Nyasynth.vst
-# ps aux | rg "vPlayer 3"
-
 trash $1.trace
 trash $2.wav
 cargo build --release
