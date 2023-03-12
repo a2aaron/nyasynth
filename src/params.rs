@@ -8,8 +8,6 @@ use crate::common::{self, Decibel, Seconds};
 use crate::common::{FilterType, Hertz};
 use crate::sound_gen::NoteShape;
 
-const IDENTITY: FloatRange = FloatRange::Linear { min: 0.0, max: 1.0 };
-
 // Default values for master volume
 const DEFAULT_MASTER_VOL: Decibel = Decibel::from_db(-6.0);
 
@@ -34,8 +32,6 @@ const DEFAULT_CHORUS_DEPTH: f32 = 44.0;
 const DEFAULT_CHORUS_DISTANCE: f32 = 450.0;
 const DEFAULT_CHORUS_RATE: Hertz = Hertz(0.33);
 
-const DEFAULT_PHASE: f32 = 0.0;
-
 const DEFAULT_NOISE_MIX: f32 = 0.0;
 
 const DEFAULT_PITCHBEND: u8 = 12; // +12 semis
@@ -49,7 +45,6 @@ pub const MAX_CHORUS_DISTANCE: f32 = 1000.0;
 /// Avoid constructing too many of these--it is expensive to do so.
 pub struct MeowParameters {
     pub master_vol: Decibel,
-    pub phase: f32,
     pub noise_mix: f32,
     pub portamento_time: Seconds,
     pub pitchbend_max: u8,
@@ -105,13 +100,11 @@ impl MeowParameters {
             chorus_depth,
             chorus_distance,
             chorus_rate,
-            phase,
             vibrato_note_shape,
             chorus_note_shape,
         } = parameters;
         MeowParameters {
             master_vol: decibel(gain),
-            phase: phase.value(),
             noise_mix: noise_mix.value(),
             portamento_time: seconds(portamento_time),
             pitchbend_max: pitch_bend.value() as u8,
@@ -203,8 +196,6 @@ pub struct Parameters {
     chorus_distance: FloatParam, // Parameter<f32>,
     #[id = "chorus_rate"]
     chorus_rate: FloatParam, // Parameter<Hertz>,
-    #[id = "phase"]
-    phase: FloatParam, // Parameter<f32>,
     // "Debug" parameters (these might become not "debug" pretty soon)
     #[id = "vibrato_note_shape"]
     vibrato_note_shape: EnumParam<NoteShape>, // Parameter<NoteShape>,
@@ -226,10 +217,6 @@ impl Parameters {
             } else {
                 "Off".to_string()
             }
-        }
-
-        fn angle_formatter(value: f32) -> String {
-            format!("{:.2}", value * 360.0)
         }
 
         fn time(name: &'static str, default: Seconds, min: f32, max: f32) -> FloatParam {
@@ -340,9 +327,6 @@ impl Parameters {
                 chorus_distance,
             ),
             chorus_rate: freq("Chorus Rate", DEFAULT_CHORUS_RATE, chorus_rate),
-            phase: FloatParam::new("Phase", DEFAULT_PHASE, IDENTITY)
-                .with_unit(" deg")
-                .with_value_to_string(Arc::new(angle_formatter)),
             vibrato_note_shape: EnumParam::new("Vibrato Note Shape", NoteShape::Triangle),
             chorus_note_shape: EnumParam::new("Chorus Note Shape", NoteShape::Sine),
         }

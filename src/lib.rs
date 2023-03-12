@@ -159,7 +159,6 @@ impl Plugin for Nyasynth {
                     sample_rate,
                     params.vibrato_note_shape,
                     vibrato_params.speed,
-                    1.0,
                 ) * vibrato_params.amount;
 
                 let pitch_bend = self.pitch_bend_smoother.next();

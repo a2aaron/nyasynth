@@ -42,9 +42,9 @@ impl Chorus {
         self.write_head = (self.write_head + 1).rem_euclid(self.delay_line.len());
         self.delay_line[self.write_head] = in_sample;
 
-        let read_head_mod =
-            self.read_head_oscillator
-                .next_sample(sample_rate, shape, params.rate, 0.0);
+        let read_head_mod = self
+            .read_head_oscillator
+            .next_sample(sample_rate, shape, params.rate);
 
         let offset = params.min_distance + ((read_head_mod + 1.0) * params.depth);
 

@@ -227,7 +227,7 @@ impl Voice {
         // Get next sample
         let value = self
             .osc
-            .next_sample(sample_rate, NoteShape::Sawtooth, pitch, params.phase);
+            .next_sample(sample_rate, NoteShape::Sawtooth, pitch);
 
         // Apply noise, if the noise is turned on.
         let value = if params.noise_mix > 0.01 {
@@ -418,29 +418,14 @@ impl Oscillator {
     /// shape - what noteshape to use for the signal
     /// pitch - the pitch multiplier to be applied to the base frequency of the
     ///         oscillator.
-    /// phase_mod - how much to add to the current angle value to produce a
-    ///             a phase offset. Units are 0.0-1.0 normalized angles (so
-    ///             0.0 is zero radians, 1.0 is 2pi radians.)
-    pub fn next_sample(
-        &mut self,
-        sample_rate: SampleRate,
-        shape: NoteShape,
-        pitch: Hertz,
-        phase_mod: f32,
-    ) -> f32 {
-        // Get the raw signal. Note that we constrain the angle between 0.0-1.0. Since phase_mod is
-        // required to be positive and so is self.angle, then `fract` itself is also always positive
-        // and hence in 0.0-1.0 range. Note that we use `fract` instead of just doing `% 1.0` since
-        // fmod is slow.
-        let angle = (self.angle + phase_mod).fract();
-        let value = shape.get(angle);
+    pub fn next_sample(&mut self, sample_rate: SampleRate, shape: NoteShape, pitch: Hertz) -> f32 {
+        let value = shape.get(self.angle);
 
-        // Update the angle. Each sample is 1.0 / sample_rate apart for a
-        // complete waveform. We also multiply by pitch to advance the right amount
-        // We also constrain the angle between 0 and 1, as this reduces
-        // roundoff error.
+        // Update the angle. Each sample is 1.0 / sample_rate apart for a complete waveform.
         let angle_delta = pitch.get() / sample_rate.get();
-        // Similary, compute (self.angle + angle_delta) % 1.0 without actually calling fmod
+
+        // Compute (self.angle + angle_delta) % 1.0.
+        // Note that we use `fract` instead of just doing `% 1.0` since fmod is slow.
         self.angle = (self.angle + angle_delta).fract();
 
         value
