@@ -20,7 +20,7 @@ use keys::KeyTracker;
 use nih_plug::{nih_export_vst3, prelude::*};
 use params::{MeowParameters, Parameters};
 
-use sound_gen::{NoiseGenerator, Oscillator, SoundGenerator, RETRIGGER_TIME, SIMD_SIZE};
+use sound_gen::{NoiseGenerator, Oscillator, SoundGenerator, RETRIGGER_TIME};
 
 /// The main plugin struct.
 pub struct Nyasynth {
@@ -123,9 +123,9 @@ impl Plugin for Nyasynth {
 
         let mut block_start = 0;
         while block_start < num_samples {
-            // Initially set the block size to SIMD_SIZE (or, if the number of samples in the buffer
-            // is smaller than SIMD_SIZE, to just that value)
-            let mut block_len = (num_samples - block_start).min(SIMD_SIZE);
+            // Initially set the block size to 64 (or, if the number of samples in the buffer
+            // is smaller than 64, to just that value)
+            let mut block_len = (num_samples - block_start).min(64);
             // Consume all events from the context which happen before or at the start
             // of the block. This also shrinks the current block if there would be an event within
             // the block.

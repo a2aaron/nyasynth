@@ -16,15 +16,13 @@ nih_plug = { git = "https://github.com/a2aaron/nih-plug.git", rev = "2ecc194e461
 derive_more = "0.99"
 biquad = "0.4.0"
 ordered-float = "3.4.0"
+getrandom = "0.2.8"
+atomic_float = "0.1.0"
 
-# for preset stuff
+# perf.rs dependencies
 midly = "0.5.3"
 wav = "1.0.0"
 clap = { version = "4.1.8", features = ["derive"] }
-getrandom = "0.2.8"
-packed_simd_2 = "0.3.8"
-atomic_float = "0.1.0"
-
 
 [profile.release]
 incremental = true
