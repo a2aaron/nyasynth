@@ -20,12 +20,12 @@ use keys::KeyTracker;
 use nih_plug::{nih_export_vst3, prelude::*};
 use params::{MeowParameters, Parameters};
 
-use sound_gen::{NoiseGenerator, Oscillator, SoundGenerator, RETRIGGER_TIME};
+use sound_gen::{NoiseGenerator, Oscillator, Voice, RETRIGGER_TIME};
 
 /// The main plugin struct.
 pub struct Nyasynth {
     /// All the notes to be played.
-    notes: Vec<SoundGenerator>,
+    notes: Vec<Voice>,
     /// The parameters which are shared with the VST host
     params: Arc<Parameters>,
     pitch_bend_smoother: Smoother<Pitchbend>,
@@ -271,14 +271,14 @@ impl Nyasynth {
                 if polycat {
                     // In polycat mode, we simply add the new note.
                     let start_pitch = bend_note.map(Pitch::from_note);
-                    let gen = SoundGenerator::new(&params, start_pitch, note, vel, sample_rate);
+                    let gen = Voice::new(&params, start_pitch, note, vel, sample_rate);
                     self.notes.push(gen);
                 } else {
                     // Monocat mode.
 
                     // If there are no generators playing, start a new note
                     if self.notes.len() == 0 {
-                        let gen = SoundGenerator::new(&params, None, note, vel, sample_rate);
+                        let gen = Voice::new(&params, None, note, vel, sample_rate);
                         self.notes.push(gen);
                     } else {
                         // If there is a generator playing, retrigger it. If the generator is release state

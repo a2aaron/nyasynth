@@ -104,8 +104,7 @@ impl EnvelopeType for f32 {
 }
 
 #[derive(Debug)]
-pub struct SoundGenerator {
-    osc_1: OSCGroup,
+pub struct Voice {
     pub note: Note,
     // The ending pitch from which portamento ends up at. This and `start_pitch` are unaffected by
     // by pitch bend and pitch modifiers.
@@ -123,29 +122,52 @@ pub struct SoundGenerator {
     // The computed filter sweep values. This is updated on NoteOn (or any note velocity change) as
     // well as once per block.
     filter_sweep: FilterSweeper,
+    // The crossfader envelope, used when crossfading between notes in monocat mode.
     crossfader: Option<Crossfader>,
+    // The signal generating oscillator
+    osc: Oscillator,
+    // The ADSR volume envelope
+    vol_env: Envelope<f32>,
+    // The vibrato attack envelope
+    vibrato_env: Envelope<f32>,
+    // The state for the EQ/filters, applied after the signal is generated
+    filter: DirectForm1<f32>,
+    // The ADSR filter envelope
+    filter_env: Envelope<f32>,
 }
 
-impl SoundGenerator {
+impl Voice {
     pub fn new(
         params: &MeowParameters,
         start_pitch: Option<Pitch>,
         note: Note,
         vel: Vel,
         sample_rate: SampleRate,
-    ) -> SoundGenerator {
+    ) -> Voice {
         let end_pitch = Pitch::from_note(note);
         let start_pitch = start_pitch.unwrap_or(end_pitch);
-        SoundGenerator {
+        Voice {
             note,
             start_pitch,
             end_pitch,
             vel,
             samples_since_note_on: 0,
             note_state: NoteState::Held,
-            osc_1: OSCGroup::new(sample_rate),
             filter_sweep: FilterSweeper::new(params, vel),
             crossfader: None,
+            osc: Oscillator::new(),
+            vol_env: Envelope::<f32>::new(),
+            vibrato_env: Envelope::<f32>::new(),
+            filter_env: Envelope::<f32>::new(),
+            filter: DirectForm1::<f32>::new(
+                biquad::Coefficients::<f32>::from_params(
+                    biquad::Type::LowPass,
+                    sample_rate.hz(),
+                    (10000).hz(),
+                    Q_BUTTERWORTH_F32,
+                )
+                .unwrap(),
+            ),
         }
     }
 
@@ -171,136 +193,7 @@ impl SoundGenerator {
         vibrato_mod: f32,
     ) -> (f32, f32) {
         self.samples_since_note_on += 1;
-
-        // Note: Note context will have changed from above state transitions, so we must get a fresh copy.
-        // Failing to do so means that we persist in the release state for one sample too long (which
-        // cause envelope discontiunities due to the fact that `note_state_changed` calls `remember`, which
-        // in turn results in the `ease_from` values for envelopes changing.)
-        let osc_1 = self.osc_1.next_sample(
-            &params,
-            self.filter_sweep,
-            self.get_note_context(sample_rate),
-            noise_generator,
-            self.vel,
-            self.get_current_pitch(sample_rate, params.portamento_time),
-            pitch_bend,
-            vibrato_mod,
-        );
-
-        let osc_1 = if let Some(crossfader) = &mut self.crossfader {
-            osc_1 * crossfader.next()
-        } else {
-            osc_1
-        };
-
-        (osc_1, osc_1)
-    }
-
-    pub fn note_off(&mut self) {
-        self.osc_1.on_release();
-        self.note_state = NoteState::Released(self.samples_since_note_on);
-    }
-
-    pub fn is_released(&self) -> bool {
-        match self.note_state {
-            NoteState::Released(_) => true,
-            NoteState::Held => false,
-        }
-    }
-
-    pub fn start_crossfade(
-        &mut self,
-        params: &MeowParameters,
-        sample_rate: SampleRate,
-        portamento_time: Seconds,
-        bend_from_current: bool,
-        new_note: Note,
-        new_vel: Vel,
-    ) -> SoundGenerator {
-        self.note_off();
-        let start_pitch = if bend_from_current {
-            Some(self.get_current_pitch(sample_rate, portamento_time))
-        } else {
-            None
-        };
-        let mut new_gen = SoundGenerator::new(params, start_pitch, new_note, new_vel, sample_rate);
-        self.crossfader = Some(Crossfader::fade_out());
-        new_gen.crossfader = Some(Crossfader::fade_in());
-        new_gen
-    }
-
-    fn get_note_context(&self, sample_rate: SampleRate) -> NoteContext {
-        NoteContext {
-            note_state: self.note_state,
-            sample_rate,
-            samples_since_note_on: self.samples_since_note_on,
-        }
-    }
-
-    fn get_current_pitch(&self, sample_rate: SampleRate, portamento_time: Seconds) -> Pitch {
         let context = self.get_note_context(sample_rate);
-        let time = context
-            .sample_rate
-            .to_seconds(context.samples_since_note_on);
-        let t = (time / portamento_time).clamp(0.0, 1.0);
-        lerp(self.start_pitch, self.end_pitch, t)
-    }
-}
-
-#[derive(Debug)]
-struct OSCGroup {
-    osc: Oscillator,
-    vol_env: Envelope<f32>,
-    vibrato_env: Envelope<f32>,
-    // The state for the EQ/filters, applied after the signal is generated
-    filter: DirectForm1<f32>,
-    filter_env: Envelope<f32>,
-    sample_counter: usize,
-}
-
-impl OSCGroup {
-    fn new(sample_rate: SampleRate) -> OSCGroup {
-        OSCGroup {
-            osc: Oscillator::new(),
-            vol_env: Envelope::<f32>::new(),
-            vibrato_env: Envelope::<f32>::new(),
-            filter_env: Envelope::<f32>::new(),
-            filter: DirectForm1::<f32>::new(
-                biquad::Coefficients::<f32>::from_params(
-                    biquad::Type::LowPass,
-                    sample_rate.hz(),
-                    (10000).hz(),
-                    Q_BUTTERWORTH_F32,
-                )
-                .unwrap(),
-            ),
-            sample_counter: 0,
-        }
-    }
-
-    /// Get the next sample from the osc group, applying modulation parameters
-    /// as well.
-    /// base_vel - The velocity of the note. This is affected by volume
-    ///            modulation. This is a 0.0-1.0 normalized value.
-    /// base_note - The base pitch of the note
-    /// pitch_bend - A [-1.0, 1.0] range value
-    /// (mod_type, modulation) - Indicates what modulation type, if any, to
-    ///                          apply to the signal. This is from OSC 2
-    /// mod_bank - the various mod_bank envelopes and LFOs that also modulate
-    ///            the signal
-    /// apply_filter - if true, apply the current filter.
-    fn next_sample(
-        &mut self,
-        params: &MeowParameters,
-        filter_sweep: FilterSweeper,
-        context: NoteContext,
-        noise_generator: &mut NoiseGenerator,
-        base_vel: Vel,
-        base_note: Pitch,
-        pitch_bend: Pitchbend,
-        vibrato_mod: f32,
-    ) -> f32 {
-        let sample_rate = context.sample_rate;
 
         // Compute volume from parameters
         let vol_env = {
@@ -309,8 +202,9 @@ impl OSCGroup {
             let x = self.vol_env.get(&params.vol_envelope, context);
             (x * x * x + x) / 2.0
         };
-        let total_volume = base_vel.raw * vol_env.max(0.0);
+        let total_volume = self.vel.raw * vol_env.max(0.0);
 
+        // Compute pitch modifiers
         let pitch_mod = {
             let pitch_bend_mod = pitch_bend.get() * (params.pitchbend_max as f32);
 
@@ -323,18 +217,17 @@ impl OSCGroup {
             // So (2^1/12)^n = 2^(n/12) is n semitones away.
             Pitch((vibrato_mod + pitch_bend_mod) / 12.0)
         };
+        let base_note = self.get_current_pitch(sample_rate, params.portamento_time);
 
         // Note that we can just add these values together. This is because base_note and pitch_mod
         // are in the same linear space (specifically: +1.0 maps to one octave, which happens because
         // converting to and from Hertz uses exp2 and log2).
         let pitch = (base_note + pitch_mod).into_hertz();
 
-        let shape = NoteShape::Sawtooth;
-
         // Get next sample
         let value = self
             .osc
-            .next_sample(sample_rate, shape, pitch, params.phase);
+            .next_sample(sample_rate, NoteShape::Sawtooth, pitch, params.phase);
 
         // Apply noise, if the noise is turned on.
         let value = if params.noise_mix > 0.01 {
@@ -348,12 +241,12 @@ impl OSCGroup {
         let value = {
             // Only update the filter once every 16 samples (reduces expensive
             // biquad::Coefficients::from_params calls without reducing sound quality much.)
-            if self.sample_counter % 16 == 0 {
+            if self.samples_since_note_on % 16 == 0 {
                 let filter = &params.filter;
                 // TODO: investigate if this is correct
                 let filter_env = self.filter_env.get(&params.filter_envelope, context);
 
-                let cutoff_freq = filter_sweep.lerp(filter_env);
+                let cutoff_freq = self.filter_sweep.lerp(filter_env);
 
                 // avoid numerical instability encountered at very low
                 // or high frequencies. Clamping at around 20 Hz also
@@ -381,14 +274,63 @@ impl OSCGroup {
                 value
             }
         };
-        self.sample_counter += 1;
-        value * total_volume
+        let value = value * total_volume;
+
+        let value = if let Some(crossfader) = &mut self.crossfader {
+            value * crossfader.next()
+        } else {
+            value
+        };
+
+        (value, value)
     }
 
-    /// Handle hold-to-release and release-to-retrigger state transitions
-    fn on_release(&mut self) {
+    pub fn note_off(&mut self) {
         self.vol_env.remember();
         self.filter_env.remember();
+        self.note_state = NoteState::Released(self.samples_since_note_on);
+    }
+
+    pub fn is_released(&self) -> bool {
+        match self.note_state {
+            NoteState::Released(_) => true,
+            NoteState::Held => false,
+        }
+    }
+
+    pub fn start_crossfade(
+        &mut self,
+        params: &MeowParameters,
+        sample_rate: SampleRate,
+        portamento_time: Seconds,
+        bend_from_current: bool,
+        new_note: Note,
+        new_vel: Vel,
+    ) -> Voice {
+        self.note_off();
+        let start_pitch = if bend_from_current {
+            Some(self.get_current_pitch(sample_rate, portamento_time))
+        } else {
+            None
+        };
+        let mut new_gen = Voice::new(params, start_pitch, new_note, new_vel, sample_rate);
+        self.crossfader = Some(Crossfader::fade_out());
+        new_gen.crossfader = Some(Crossfader::fade_in());
+        new_gen
+    }
+
+    fn get_note_context(&self, sample_rate: SampleRate) -> NoteContext {
+        NoteContext {
+            note_state: self.note_state,
+            sample_rate,
+            samples_since_note_on: self.samples_since_note_on,
+        }
+    }
+
+    fn get_current_pitch(&self, sample_rate: SampleRate, portamento_time: Seconds) -> Pitch {
+        let time = sample_rate.to_seconds(self.samples_since_note_on);
+        let t = (time / portamento_time).clamp(0.0, 1.0);
+        lerp(self.start_pitch, self.end_pitch, t)
     }
 }
 
@@ -535,8 +477,7 @@ impl<T: EnvelopeType> Envelope<T> {
         }
     }
 
-    /// Get the current envelope value. `time` is how many samples it has been
-    /// since the start of the note
+    /// Get the current envelope value.
     fn get(&mut self, params: &impl EnvelopeParams<T>, context: NoteContext) -> T {
         let time = context.samples_since_note_on;
         let note_state = context.note_state;
