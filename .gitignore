@@ -2,6 +2,8 @@
 /iced_audio
 /iced_baseview
 /biquad-rs
+/traces
+/recordings
 *.log
 *.vst
 *.wav
