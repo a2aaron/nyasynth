@@ -13,15 +13,12 @@ use std::simd::Simd;
 type f32s = Simd<f32, SIMD_SIZE>;
 
 /// The size, in lanes, of the f32s type. Valid values are 2, 4, 8, and 16.
-const SIMD_SIZE: usize = 64;
+pub const SIMD_SIZE: usize = 64;
 
 const TAU: f32 = std::f32::consts::TAU;
 
 // The time, in samples, for how long retrigger phase is.
 pub const RETRIGGER_TIME: SampleTime = 88; // 88 samples is about 2 miliseconds.
-
-/// An offset, in samples, from the start of the frame.
-type FrameDelta = usize;
 
 /// A value in range [0.0, 1.0] which denotes the position wihtin a wave cycle.
 type Angle = f32;
@@ -131,40 +128,32 @@ pub struct SoundGenerator {
     samples_since_note_on: SampleTime,
     // The current state of the SoundGenerator (held, released, etc)
     note_state: NoteState,
-    // The per-sample filter applied to the output
-    // filter: DirectForm1<f32>,
-    // If Some(frame_delta, vel), then a note on event occurs in the next frame
-    // at sample `frame_delta` samples into the the frame, and the note has a
-    // note velocity of `vel`
-    next_note_on: Option<(FrameDelta, NoteOnEvent)>,
-    // If Some(frame_delta), then the next note off event occurs in the next frame
-    // at `frame_delta` samples into the frame
-    next_note_off: Option<FrameDelta>,
     // The computed filter sweep values. This is updated on NoteOn (or any note velocity change) as
     // well as once per block.
     filter_sweep: FilterSweeper,
+    crossfader: Option<Crossfader>,
 }
 
 impl SoundGenerator {
     pub fn new(
         params: &MeowParameters,
+        start_pitch: Option<Pitch>,
         note: Note,
         vel: Vel,
         sample_rate: SampleRate,
     ) -> SoundGenerator {
         let end_pitch = Pitch::from_note(note);
-        let start_pitch = end_pitch;
+        let start_pitch = start_pitch.unwrap_or(end_pitch);
         SoundGenerator {
             note,
             start_pitch,
             end_pitch,
             vel,
             samples_since_note_on: 0,
-            note_state: NoteState::None,
+            note_state: NoteState::Held,
             osc_1: OSCGroup::new(sample_rate),
-            next_note_on: None,
-            next_note_off: None,
             filter_sweep: FilterSweeper::new(params, vel),
+            crossfader: None,
         }
     }
 
@@ -172,7 +161,7 @@ impl SoundGenerator {
     /// it is in the release state and it is after the total release time.
     pub fn is_alive(&self, sample_rate: SampleRate, params: &MeowParameters) -> bool {
         match self.note_state {
-            NoteState::None | NoteState::Held | NoteState::Retrigger { .. } => true,
+            NoteState::Held => true,
             NoteState::Released(release_time) => {
                 // The number of seconds it has been since release
                 let time = sample_rate.to_seconds(self.samples_since_note_on - release_time);
@@ -185,79 +174,11 @@ impl SoundGenerator {
         &mut self,
         params: &MeowParameters,
         noise_generator: &mut NoiseGenerator,
-        i: FrameDelta,
         sample_rate: SampleRate,
         pitch_bend: Pitchbend,
         vibrato_mod: f32,
     ) -> (f32, f32) {
-        // Only advance time if the note is being held down.
-        match self.note_state {
-            NoteState::None => (),
-            _ => self.samples_since_note_on += 1,
-        }
-
-        // Handle note on event. If the note was previously not triggered (aka:
-        // this is the first time the note has been triggered), then the note
-        // transitions to the hold state. If this is a retrigger, then the note
-        // transitions to the retrigger state, with volume `vol`.
-        // Also, we set the note velocity to the appropriate new note velocity.
-        match self.next_note_on {
-            Some((note_on, event)) if note_on == i => {
-                let edge = match self.note_state {
-                    NoteState::None => NoteStateEdge::InitialTrigger,
-                    _ => NoteStateEdge::NoteRetriggered,
-                };
-
-                self.osc_1.note_state_changed(edge);
-
-                // Update the note state
-                match self.note_state {
-                    NoteState::None => {
-                        self.note_state = NoteState::Held;
-
-                        self.apply_note_on_event(params, event);
-                    }
-                    _ => {
-                        self.note_state = NoteState::Retrigger {
-                            start_time: self.samples_since_note_on,
-                            event,
-                        };
-
-                        // On a Retrigger, save the NoteOn event to be applied after the Retrigger
-                        // state is finished. If we apply the NoteOn event now, a click will be caused
-                        // due to the note pitch changing suddenly
-                    }
-                };
-                self.next_note_on = None;
-            }
-            _ => (),
-        }
-
-        // Trigger note off events
-        match self.next_note_off {
-            Some(note_off) if note_off == i => {
-                self.osc_1.note_state_changed(NoteStateEdge::NoteReleased);
-
-                self.note_state = NoteState::Released(self.samples_since_note_on);
-                self.next_note_off = None;
-            }
-            _ => (),
-        }
-
-        // If it has been 10 samples in the retrigger state, switch back to
-        // the held state. This also resets the time.
-        if let NoteState::Retrigger {
-            start_time: retrigger_time,
-            event,
-        } = self.note_state
-        {
-            if self.samples_since_note_on - retrigger_time > RETRIGGER_TIME {
-                self.apply_note_on_event(params, event);
-
-                self.note_state = NoteState::Held;
-                self.samples_since_note_on = 0;
-            }
-        }
+        self.samples_since_note_on += 1;
 
         // Note: Note context will have changed from above state transitions, so we must get a fresh copy.
         // Failing to do so means that we persist in the release state for one sample too long (which
@@ -274,46 +195,46 @@ impl SoundGenerator {
             vibrato_mod,
         );
 
+        let osc_1 = if let Some(crossfader) = &mut self.crossfader {
+            osc_1 * crossfader.next()
+        } else {
+            osc_1
+        };
+
         (osc_1, osc_1)
     }
 
-    pub fn note_on(&mut self, frame_delta: i32, vel: Vel, bend_note: Option<Note>) {
-        let start_pitch = bend_note.map(Pitch::from_note);
-        let note_on = NoteOnEvent::new(self.note, vel, start_pitch);
-        self.next_note_on = Some((frame_delta as usize, note_on));
-    }
-
-    pub fn note_off(&mut self, frame_delta: i32) {
-        self.next_note_off = Some(frame_delta as usize);
+    pub fn note_off(&mut self) {
+        self.osc_1.on_release();
+        self.note_state = NoteState::Released(self.samples_since_note_on);
     }
 
     pub fn is_released(&self) -> bool {
         match self.note_state {
             NoteState::Released(_) => true,
-            NoteState::None => false,
             NoteState::Held => false,
-            NoteState::Retrigger { .. } => false,
         }
     }
 
     pub fn retrigger(
         &mut self,
+        params: &MeowParameters,
         sample_rate: SampleRate,
         portamento_time: Seconds,
         bend_from_current: bool,
         new_note: Note,
         new_vel: Vel,
-        frame_delta: i32,
-    ) {
+    ) -> SoundGenerator {
+        self.note_off();
         let start_pitch = if bend_from_current {
             Some(self.get_current_pitch(sample_rate, portamento_time))
         } else {
             None
         };
-
-        let note_on = NoteOnEvent::new(new_note, new_vel, start_pitch);
-        self.next_note_on = Some((frame_delta as usize, note_on));
-        self.next_note_off = None;
+        let mut new_gen = SoundGenerator::new(params, start_pitch, new_note, new_vel, sample_rate);
+        self.crossfader = Some(Crossfader::fade_out());
+        new_gen.crossfader = Some(Crossfader::fade_in());
+        new_gen
     }
 
     fn get_note_context(&self, sample_rate: SampleRate) -> NoteContext {
@@ -331,17 +252,6 @@ impl SoundGenerator {
             .to_seconds(context.samples_since_note_on);
         let t = (time / portamento_time).clamp(0.0, 1.0);
         lerp(self.start_pitch, self.end_pitch, t)
-    }
-
-    /// Apply the values contained within a NoteOnEvent. This is used to set the velocity and pitch
-    /// values that occur at the start of a note event (that is, this function should be called
-    /// when entering the Held state).
-    fn apply_note_on_event(&mut self, params: &MeowParameters, event: NoteOnEvent) {
-        self.note = event.note;
-        self.vel = event.vel;
-        self.start_pitch = event.start_pitch;
-        self.end_pitch = event.end_pitch;
-        self.filter_sweep = FilterSweeper::new(params, event.vel);
     }
 }
 
@@ -581,15 +491,56 @@ impl OSCGroup {
     }
 
     /// Handle hold-to-release and release-to-retrigger state transitions
-    fn note_state_changed(&mut self, edge: NoteStateEdge) {
-        match edge {
-            NoteStateEdge::NoteReleased | NoteStateEdge::NoteRetriggered => {
-                self.vol_env.remember();
-                self.filter_env.remember();
-            }
-            _ => {}
+    fn on_release(&mut self) {
+        self.vol_env.remember();
+        self.filter_env.remember();
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Crossfader {
+    state: CrossfadeState,
+    samples: usize,
+}
+
+impl Crossfader {
+    fn fade_in() -> Crossfader {
+        Crossfader {
+            state: CrossfadeState::FadeIn,
+            samples: 0,
         }
     }
+
+    fn fade_out() -> Crossfader {
+        Crossfader {
+            state: CrossfadeState::FadeOut,
+            samples: 0,
+        }
+    }
+
+    fn next(&mut self) -> f32 {
+        const FADE_LENGTH: usize = 44;
+        if self.samples >= FADE_LENGTH {
+            match self.state {
+                CrossfadeState::FadeIn => 1.0,
+                CrossfadeState::FadeOut => 0.0,
+            }
+        } else {
+            let t = self.samples as f32 / FADE_LENGTH as f32;
+            self.samples += 1;
+
+            match self.state {
+                CrossfadeState::FadeIn => lerp(0.0, 1.0, t),
+                CrossfadeState::FadeOut => lerp(1.0, 0.0, t),
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum CrossfadeState {
+    FadeIn,
+    FadeOut,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -702,28 +653,6 @@ struct NoteContext {
     sample_rate: SampleRate,
 }
 
-/// Convience struct for the next_note_on flag.
-#[derive(Debug, Clone, Copy)]
-struct NoteOnEvent {
-    vel: Vel,
-    note: Note,
-    start_pitch: Pitch,
-    end_pitch: Pitch,
-}
-
-impl NoteOnEvent {
-    fn new(note: Note, vel: Vel, start_pitch: Option<Pitch>) -> NoteOnEvent {
-        let end_pitch = Pitch::from_note(note);
-        let start_pitch = start_pitch.unwrap_or(end_pitch);
-        NoteOnEvent {
-            vel,
-            note,
-            start_pitch,
-            end_pitch,
-        }
-    }
-}
-
 #[derive(Debug)]
 pub struct Envelope<T> {
     // The value to lerp from when in Retrigger or Release state
@@ -748,7 +677,6 @@ impl<T: EnvelopeType> Envelope<T> {
         let sample_rate = context.sample_rate;
 
         let value = match note_state {
-            NoteState::None => T::zero(),
             NoteState::Held => {
                 let time = sample_rate.to_seconds(time);
                 let attack = params.attack();
@@ -780,14 +708,6 @@ impl<T: EnvelopeType> Envelope<T> {
                 } else {
                     T::zero()
                 }
-            }
-            NoteState::Retrigger {
-                start_time: retrigger_time,
-                ..
-            } => {
-                // Forcibly decay over RETRIGGER_TIME.
-                let time = (time - retrigger_time) as f32 / RETRIGGER_TIME as f32;
-                T::lerp_retrigger(self.ease_from, T::zero(), time)
             }
         };
         // Store the premultiplied value. This is because using the post-multiplied
@@ -821,30 +741,11 @@ impl<T: EnvelopeType> Envelope<T> {
 /// be tracked on a per envelope basis, I think.
 #[derive(Debug, Clone, Copy)]
 enum NoteState {
-    /// The note is not being held down, but no previous NoteOn or NoteOff exists
-    /// for the note. This state indicates that a note was triggered this frame
-    /// but the sample for when the note was triggered has not yet been reached.
-    None,
     /// The note is being held down
     Held,
     /// The note has just been released. The field is in samples and denotes how many
     /// samples since the oscillator has started.
     Released(SampleTime),
-    /// The note has just be retriggered during a release. `start_time` denotes when this state was
-    /// entered (specifically: it is a timestamp of how many samples since the `Held` state was entered.)
-    /// The `event` field is the `NoteOnEvent` that should be applied once the Retrigger state ends.
-    Retrigger {
-        start_time: SampleTime,
-        event: NoteOnEvent,
-    },
-}
-
-/// A state transition for a note.
-#[derive(Debug, Copy, Clone)]
-enum NoteStateEdge {
-    InitialTrigger,  // The note is being pressed for the first time
-    NoteReleased,    // The note has just been released
-    NoteRetriggered, // The note is being pressed, but not the first time
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Enum)]

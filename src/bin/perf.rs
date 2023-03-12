@@ -318,6 +318,10 @@ impl ProcessContext<Nyasynth> for DebugProcessContext {
         event.copied()
     }
 
+    fn peek_event(&self) -> Option<&PluginNoteEvent<Nyasynth>> {
+        self.events.get(self.event_index)
+    }
+
     fn send_event(&mut self, _event: PluginNoteEvent<Nyasynth>) {}
 
     fn set_latency_samples(&self, _samples: u32) {}

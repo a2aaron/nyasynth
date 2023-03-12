@@ -940,7 +940,7 @@ dependencies = [
 [[package]]
 name = "nih_plug"
 version = "0.0.0"
-source = "git+https://github.com/a2aaron/nih-plug.git?rev=4e98cf6c49060e95f27d0c9d8958921746633469#4e98cf6c49060e95f27d0c9d8958921746633469"
+source = "git+https://github.com/a2aaron/nih-plug.git?rev=2ecc194e461de1bdbc117d86449b2fb30fafb356#2ecc194e461de1bdbc117d86449b2fb30fafb356"
 dependencies = [
  "anyhow",
  "anymap",
@@ -977,7 +977,7 @@ dependencies = [
 [[package]]
 name = "nih_plug_derive"
 version = "0.1.0"
-source = "git+https://github.com/a2aaron/nih-plug.git?rev=4e98cf6c49060e95f27d0c9d8958921746633469#4e98cf6c49060e95f27d0c9d8958921746633469"
+source = "git+https://github.com/a2aaron/nih-plug.git?rev=2ecc194e461de1bdbc117d86449b2fb30fafb356#2ecc194e461de1bdbc117d86449b2fb30fafb356"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1094,6 +1094,7 @@ dependencies = [
 name = "nyasynth"
 version = "0.1.0"
 dependencies = [
+ "atomic_float",
  "biquad",
  "clap",
  "derive_more",

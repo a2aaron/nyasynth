@@ -1,6 +1,7 @@
 #![feature(trait_alias)]
 #![feature(anonymous_lifetime_in_impl_trait)]
 #![feature(portable_simd)]
+#![feature(let_chains)]
 
 mod chorus;
 pub mod common;
@@ -13,13 +14,13 @@ mod sound_gen;
 use std::sync::Arc;
 
 use chorus::Chorus;
-use common::{Note, Pitchbend, SampleRate, Vel};
+use common::{Note, Pitch, Pitchbend, SampleRate, Vel};
 use ease::lerp;
 use keys::KeyTracker;
 use nih_plug::{nih_export_vst3, prelude::*};
 use params::{MeowParameters, Parameters};
 
-use sound_gen::{NoiseGenerator, Oscillator, SoundGenerator, RETRIGGER_TIME};
+use sound_gen::{NoiseGenerator, Oscillator, SoundGenerator, RETRIGGER_TIME, SIMD_SIZE};
 
 /// The main plugin struct.
 pub struct Nyasynth {
@@ -27,12 +28,7 @@ pub struct Nyasynth {
     notes: Vec<SoundGenerator>,
     /// The parameters which are shared with the VST host
     params: Arc<Parameters>,
-    /// Pitchbend messages. Format is (value, frame_delta) where
-    /// value is a normalized f32 and frame_delta is the offset into the current
-    /// frame for which the pitchbend value occurs
-    pitch_bend: Vec<(Pitchbend, i32)>,
-    /// The last pitch bend value from the previous frame.
-    last_pitch_bend: Pitchbend,
+    pitch_bend_smoother: Smoother<Pitchbend>,
     key_tracker: KeyTracker,
     // The vibrato LFO is global--the vibrato amount is shared across all generators, although each
     // generator gets it's own vibrato envelope.
@@ -90,14 +86,119 @@ impl Plugin for Nyasynth {
         _aux: &mut AuxiliaryBuffers,
         context: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
-        self.process_events(context);
         let sample_rate = SampleRate(context.transport().sample_rate);
         if sample_rate != self.sample_rate {
             self.set_sample_rate(sample_rate);
         }
 
+        let num_samples = buffer.samples();
         let tempo = context.transport().tempo.unwrap_or(120.0) as f32;
-        self.process(buffer, sample_rate, tempo);
+
+        let params = MeowParameters::new(&self.params, tempo);
+
+        // remove "dead" notes
+        // we do this _before_ processing any events
+        // because this is the start of a new frame, and we want to make sure
+        // that midi messages do not apply to dead notes
+        // ex: if we do this after processing midi messages, a bug occurs where
+        // - frame 0 - note is in release state and is dead by end of frame
+        // - frame 1 - process events send midi messages to dead note
+        // - frame 1 - process removes dead note
+        // - frame 1 - user is confused to why note does not play despite holding
+        //             down key (the KeyOn event was "eaten" by the dead note!)
+        {
+            // this weird block is required because the closure in `retain` captures all of `self`
+            // if you pass it `self.sample_rate` or `self.params`. Doing it like this allows it to
+            // only capture the `params` field, which avoids the issue of cannot borrow while
+            // mutably borrowed
+            self.notes.retain(|gen| gen.is_alive(sample_rate, &params));
+        }
+
+        let mut block_start = 0;
+        let mut block_len = num_samples.min(SIMD_SIZE);
+
+        let (left_out, right_out) = {
+            let outputs = buffer.as_slice();
+            let (left_out, rest) = outputs.split_first_mut().unwrap();
+            let right_out = &mut rest[0];
+            (left_out, right_out)
+        };
+
+        while block_start < num_samples {
+            // Consume all events from the context which happen before or at the start
+            // of the block. This also shrinks the current block if there would be an event within
+            // the block.
+            while let Some(next_event) = context.peek_event() {
+                let timing = next_event.timing() as usize;
+                // If the event occurs before or at the start of this block, then process the event
+                if timing <= block_start {
+                    self.process_event(&params, sample_rate, context.next_event().unwrap())
+                } else if timing < block_start + block_len {
+                    // If the event would occur in the middle of the block, then do not process the
+                    // event and cut this block short.
+                    block_len = timing - block_start;
+                } else {
+                    break;
+                }
+            }
+
+            let block_end = block_start + block_len;
+
+            // Fill each block with zeros
+            left_out[block_start..block_end].fill(0.0);
+            right_out[block_start..block_end].fill(0.0);
+
+            let vibrato_params = &params.vibrato_lfo;
+
+            for i in 0..block_len {
+                // Get the vibrato modifier, which is global across all of the voices. (Note that each
+                // generator gets it's own vibrato envelope).
+                let vibrato_mod = self.vibrato_lfo.next_sample(
+                    sample_rate,
+                    params.vibrato_note_shape,
+                    vibrato_params.speed,
+                    1.0,
+                ) * vibrato_params.amount;
+
+                let pitch_bend = self.pitch_bend_smoother.next();
+
+                for voice in &mut self.notes {
+                    let (left, right) = voice.next_sample(
+                        &params,
+                        &mut self.noise_generator,
+                        sample_rate,
+                        pitch_bend,
+                        vibrato_mod,
+                    );
+
+                    left_out[block_start + i] += left;
+                    right_out[block_start + i] += right;
+                }
+            }
+
+            block_start = block_end;
+        }
+
+        let chorus_params = &params.chorus;
+        // Chorus  and other post processing effects
+        for i in 0..num_samples {
+            let left = left_out[i];
+            let right = right_out[i];
+
+            // Get the chorus effect
+            let chorus = self.chorus.next_sample(
+                left,
+                sample_rate,
+                &chorus_params,
+                params.chorus_note_shape,
+            );
+
+            let left = lerp(left, chorus, chorus_params.mix);
+            let right = lerp(right, chorus, chorus_params.mix);
+
+            left_out[i] = left * params.master_vol.get_amp();
+            right_out[i] = right * params.master_vol.get_amp();
+        }
         ProcessStatus::Normal
     }
 
@@ -109,7 +210,7 @@ impl Plugin for Nyasynth {
         // Turn all notes off (this is done so that notes do not "dangle", since
         // its possible that noteoff won't ever be recieved).
         for note in &mut self.notes {
-            note.note_off(0);
+            note.note_off();
         }
     }
 
@@ -131,13 +232,12 @@ impl Default for Nyasynth {
         Nyasynth {
             params: Arc::new(Parameters::new()),
             notes: Vec::with_capacity(16),
-            pitch_bend: Vec::with_capacity(16),
             key_tracker: KeyTracker::new(),
-            last_pitch_bend: Pitchbend::new(0.0),
             vibrato_lfo: Oscillator::new(),
             chorus: Chorus::new(sample_rate),
             noise_generator: NoiseGenerator::new(),
             sample_rate: SampleRate(44100.0),
+            pitch_bend_smoother: Smoother::new(SmoothingStyle::Linear(0.1)),
         }
     }
 }
@@ -149,202 +249,101 @@ impl Vst3Plugin for Nyasynth {
 }
 
 impl Nyasynth {
-    // Output audio given the current state of the VST
-    fn process(&mut self, buffer: &mut Buffer, sample_rate: SampleRate, tempo: f32) {
-        let params = MeowParameters::new(&self.params, tempo);
-
-        let num_samples = buffer.samples();
-
-        // Get the envelope from MIDI pitch bend
-        let (pitch_bends, last_bend) =
-            Pitchbend::to_pitch_envelope(&self.pitch_bend, self.last_pitch_bend, num_samples);
-        self.last_pitch_bend = last_bend;
-
-        let pitch_bends: Vec<_> = pitch_bends.collect();
-
-        // Get sound for each note
-        let (left_out, right_out) = &mut buffer.as_slice().split_at_mut(1);
-        let left_out = &mut left_out[0];
-        let right_out = &mut right_out[0];
-        left_out.fill(0.0);
-        right_out.fill(0.0);
-
-        let vibrato_params = &params.vibrato_lfo;
-        let chorus_params = &params.chorus;
-
-        for gen in &mut self.notes {
-            for i in 0..num_samples {
-                // Get the vibrato modifier, which is global across all of the generators. (Note that each
-                // generator gets it's own vibrato envelope).
-                let vibrato_mod = self.vibrato_lfo.next_sample(
-                    sample_rate,
-                    params.vibrato_note_shape,
-                    vibrato_params.speed,
-                    1.0,
-                ) * vibrato_params.amount;
-
-                let (left, right) = gen.next_sample(
-                    &params,
-                    &mut self.noise_generator,
-                    i,
-                    sample_rate,
-                    pitch_bends[i],
-                    vibrato_mod,
-                );
-
-                left_out[i] += left;
-                right_out[i] += right;
-            }
-        }
-
-        // Write sound
-        for i in 0..num_samples {
-            let left = left_out[i];
-            let right = right_out[i];
-
-            // Get the chorus effect
-            let chorus = self.chorus.next_sample(
-                left,
-                sample_rate,
-                &chorus_params,
-                params.chorus_note_shape,
-            );
-
-            let left = lerp(left, chorus, chorus_params.mix);
-            let right = lerp(right, chorus, chorus_params.mix);
-
-            left_out[i] = left * params.master_vol.get_amp();
-            right_out[i] = right * params.master_vol.get_amp();
-        }
+    fn set_sample_rate(&mut self, sample_rate: SampleRate) {
+        self.sample_rate = sample_rate;
+        self.chorus.set_sample_rate(sample_rate);
     }
 
-    fn process_events(&mut self, events: &mut impl ProcessContext<Self>) {
-        let sample_rate = SampleRate(events.transport().sample_rate);
-        let tempo = events.transport().tempo.unwrap_or(120.0) as f32;
-        let params = MeowParameters::new(&self.params, tempo);
-        // remove "dead" notes
-        // we do this in process_events _before_ processing any midi messages
-        // because this is the start of a new frame, and we want to make sure
-        // that midi messages do not apply to dead notes
-        // ex: if we do this after processing midi messages, a bug occurs where
-        // - frame 0 - note is in release state and is dead by end of frame
-        // - frame 1 - process events send midi messages to dead note
-        // - frame 1 - process removes dead note
-        // - frame 1 - user is confused to why note does not play despite holding
-        //             down key (the KeyOn event was "eaten" by the dead note!)
-        {
-            // this weird block is required because the closure in `retain` captures all of `self`
-            // if you pass it `self.sample_rate` or `self.params`. Doing it like this allows it to
-            // only capture the `params` field, which avoids the issue of cannot borrow while
-            // mutably borrowed
-            self.notes.retain(|gen| gen.is_alive(sample_rate, &params));
-        }
+    fn process_event(
+        &mut self,
+        params: &MeowParameters,
+        sample_rate: SampleRate,
+        event: NoteEvent<()>,
+    ) {
+        match event {
+            NoteEvent::NoteOn { note, velocity, .. } => {
+                let vel = Vel::new(velocity);
+                let note = Note(note);
+                let polycat = params.polycat;
+                let bend_note = self.key_tracker.note_on(note, vel, polycat);
+                if polycat {
+                    // In polycat mode, we simply add the new note.
+                    let start_pitch = bend_note.map(Pitch::from_note);
+                    let gen = SoundGenerator::new(&params, start_pitch, note, vel, sample_rate);
+                    self.notes.push(gen);
+                } else {
+                    // Monocat mode.
 
-        // Clear pitch bend to get new messages
-        self.pitch_bend.clear();
-        while let Some(event) = events.next_event() {
-            let frame_delta = event.timing() as i32;
-            match event {
-                NoteEvent::NoteOn { note, velocity, .. } => {
-                    let vel = Vel::new(velocity);
-                    let note = Note(note);
-                    let polycat = params.polycat;
-                    let bend_note = self.key_tracker.note_on(note, vel, polycat);
-                    if polycat {
-                        // In polycat mode, we simply add the new note.
-                        let mut gen = SoundGenerator::new(&params, note, vel, sample_rate);
-                        gen.note_on(frame_delta, vel, bend_note);
+                    // If there are no generators playing, start a new note
+                    if self.notes.len() == 0 {
+                        let gen = SoundGenerator::new(&params, None, note, vel, sample_rate);
                         self.notes.push(gen);
                     } else {
-                        // Monocat mode.
-                        if self.notes.len() > 1 {
-                            nih_warn!(
-                                "More than one note playing in monocat mode? (noteon) {:?}",
-                                self.notes
-                            );
-                        }
+                        // If there is a generator playing, retrigger it. If the generator is release state
+                        // then also do portamento.
+                        let bend_from_current = !self.notes.last().unwrap().is_released();
+                        let new_gen = self.notes.last_mut().unwrap().retrigger(
+                            params,
+                            sample_rate,
+                            params.portamento_time,
+                            bend_from_current,
+                            note,
+                            vel,
+                        );
+                        self.notes.push(new_gen);
+                    }
+                };
+            }
+            NoteEvent::NoteOff { note, .. } => {
+                let polycat = params.polycat;
+                let note = Note(note);
+                let top_of_stack = self.key_tracker.note_off(note);
 
-                        // If there are no generators playing, start a new note
-                        if self.notes.len() == 0 {
-                            let mut gen = SoundGenerator::new(&params, note, vel, sample_rate);
-                            gen.note_on(frame_delta, vel, None);
-                            self.notes.push(gen);
-                        } else {
-                            // If there is a generator playing, retrigger it. If the generator is release state
-                            // then also do portamento.
-                            let bend_from_current = !self.notes[0].is_released();
-                            self.notes[0].retrigger(
-                                sample_rate,
-                                params.portamento_time,
-                                bend_from_current,
-                                note,
-                                vel,
-                                frame_delta,
-                            );
-                        }
-                    };
-                }
-                NoteEvent::NoteOff { note, .. } => {
-                    let polycat = params.polycat;
-                    let note = Note(note);
-                    let top_of_stack = self.key_tracker.note_off(note);
+                if polycat {
+                    // On note off, send note off to all sound generators matching the note
+                    // This is done only to notes which are not yet released
+                    for gen in self
+                        .notes
+                        .iter_mut()
+                        .filter(|gen| !gen.is_released() && gen.note == note)
+                    {
+                        gen.note_off();
+                    }
+                } else {
+                    // Monocat mode.
 
-                    if polycat {
-                        // On note off, send note off to all sound generators matching the note
-                        // This is done only to notes which are not yet released
-                        for gen in self
-                            .notes
-                            .iter_mut()
-                            .filter(|gen| !gen.is_released() && gen.note == note)
-                        {
-                            gen.note_off(frame_delta);
-                        }
+                    if self.key_tracker.held_keys.len() == 0 {
+                        // If there aren't any notes currently being held anymore, just send note off
+                        self.notes.iter_mut().for_each(|x| x.note_off());
                     } else {
-                        // Monocat mode.
-                        if self.notes.len() > 1 {
-                            nih_warn!(
-                                "More than one note playing in monocat mode? (noteoff) {:?}",
-                                self.notes
-                            );
-                        }
-
-                        if self.key_tracker.held_keys.len() == 0 {
-                            // If there aren't any notes currently being held anymore, just send note off
-                            self.notes.iter_mut().for_each(|x| x.note_off(frame_delta));
-                        } else {
-                            // If there is a sound playing and the key tracker has a new top-of-stack note,
-                            // then ask the generator retrigger.
-                            match (self.notes.first_mut(), top_of_stack) {
-                                (None, None) => (),
-                                (None, Some(_)) => (),
-                                (Some(_), None) => (),
-                                (Some(gen), Some((new_note, new_vel))) => gen.retrigger(
+                        // If there is a sound playing and the key tracker has a new top-of-stack note,
+                        // then ask the generator retrigger.
+                        match (self.notes.last_mut(), top_of_stack) {
+                            (None, None) => (),
+                            (None, Some(_)) => (),
+                            (Some(_), None) => (),
+                            (Some(gen), Some((new_note, new_vel))) => {
+                                let new_gen = gen.retrigger(
+                                    params,
                                     sample_rate,
                                     params.portamento_time,
                                     true,
                                     new_note,
                                     new_vel,
-                                    frame_delta,
-                                ),
+                                );
+                                self.notes.push(new_gen)
                             }
                         }
                     }
                 }
-                NoteEvent::MidiPitchBend { value, .. } => {
-                    self.pitch_bend
-                        .push((Pitchbend::from_zero_one_range(value), frame_delta));
-                }
-                _ => (),
             }
+            NoteEvent::MidiPitchBend { value, .. } => {
+                let pitch_bend = Pitchbend::from_zero_one_range(value);
+                self.pitch_bend_smoother
+                    .set_target(sample_rate.get(), pitch_bend);
+            }
+            _ => (),
         }
-
-        // Sort pitch bend changes by delta_frame.
-        self.pitch_bend.sort_unstable_by(|a, b| a.1.cmp(&b.1));
-    }
-
-    fn set_sample_rate(&mut self, sample_rate: SampleRate) {
-        self.sample_rate = sample_rate;
-        self.chorus.set_sample_rate(sample_rate);
     }
 }
 

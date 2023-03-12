@@ -7,10 +7,11 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-# Repo pinned to https://github.com/a2aaron/nih-plug/commit/4e98cf6c49060e95f27d0c9d8958921746633469
+# Repo pinned to https://github.com/a2aaron/nih-plug/commit/2ecc194e461de1bdbc117d86449b2fb30fafb356
 # This forked version is needed to expose some of nih-plug's internals, specifically so that perf.rs
-# can implement a minimal host.
-nih_plug = { git = "https://github.com/a2aaron/nih-plug.git", rev = "4e98cf6c49060e95f27d0c9d8958921746633469", features = ["vst3", "standalone"]}
+# can implement a minimal host. Additionally, this adds a method to ProcessContext to allow peeking
+# of events.
+nih_plug = { git = "https://github.com/a2aaron/nih-plug.git", rev = "2ecc194e461de1bdbc117d86449b2fb30fafb356", features = ["vst3", "standalone"]}
 # nih_plug = { path = "../nih-plug", features = ["vst3", "standalone"]}
 derive_more = "0.99"
 biquad = "0.4.0"
@@ -22,6 +23,7 @@ wav = "1.0.0"
 clap = { version = "4.1.8", features = ["derive"] }
 getrandom = "0.2.8"
 packed_simd_2 = "0.3.8"
+atomic_float = "0.1.0"
 
 
 [profile.release]

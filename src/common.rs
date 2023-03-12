@@ -1,8 +1,9 @@
+use atomic_float::AtomicF32;
 use biquad::ToHertz;
 use derive_more::{Add, From, Into, Sub};
 use nih_plug::{
     nih_debug_assert,
-    prelude::{Enum, FloatRange},
+    prelude::{Enum, FloatRange, Smoothable},
     util::midi_note_to_freq,
 };
 use ordered_float::OrderedFloat;
@@ -288,6 +289,45 @@ impl Pitchbend {
             });
 
         (iter, last_bend)
+    }
+}
+
+impl Default for Pitchbend {
+    fn default() -> Self {
+        Self(0.0)
+    }
+}
+
+impl Smoothable for Pitchbend {
+    type Atomic = AtomicPitchbend;
+
+    fn to_f32(self) -> f32 {
+        self.get()
+    }
+
+    fn from_f32(value: f32) -> Self {
+        Pitchbend(value)
+    }
+
+    fn atomic_new(value: Self) -> Self::Atomic {
+        AtomicPitchbend(AtomicF32::from(value.get()))
+    }
+
+    fn atomic_load(this: &Self::Atomic) -> Self {
+        Pitchbend(this.0.load(std::sync::atomic::Ordering::Relaxed))
+    }
+
+    fn atomic_store(this: &Self::Atomic, value: Self) {
+        this.0
+            .store(value.get(), std::sync::atomic::Ordering::Relaxed)
+    }
+}
+
+pub struct AtomicPitchbend(AtomicF32);
+
+impl Default for AtomicPitchbend {
+    fn default() -> Self {
+        Self(AtomicF32::from(0.0))
     }
 }
 
