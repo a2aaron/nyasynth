@@ -114,9 +114,6 @@ impl Plugin for Nyasynth {
             self.notes.retain(|gen| gen.is_alive(sample_rate, &params));
         }
 
-        let mut block_start = 0;
-        let mut block_len = num_samples.min(SIMD_SIZE);
-
         let (left_out, right_out) = {
             let outputs = buffer.as_slice();
             let (left_out, rest) = outputs.split_first_mut().unwrap();
@@ -124,7 +121,11 @@ impl Plugin for Nyasynth {
             (left_out, right_out)
         };
 
+        let mut block_start = 0;
         while block_start < num_samples {
+            // Initially set the block size to SIMD_SIZE (or, if the number of samples in the buffer
+            // is smaller than SIMD_SIZE, to just that value)
+            let mut block_len = (num_samples - block_start).min(SIMD_SIZE);
             // Consume all events from the context which happen before or at the start
             // of the block. This also shrinks the current block if there would be an event within
             // the block.
@@ -135,7 +136,8 @@ impl Plugin for Nyasynth {
                     self.process_event(&params, sample_rate, context.next_event().unwrap())
                 } else if timing < block_start + block_len {
                     // If the event would occur in the middle of the block, then do not process the
-                    // event and cut this block short.
+                    // event and cut this block short such that the event occurs on the first
+                    // sample of the next block.
                     block_len = timing - block_start;
                 } else {
                     break;
