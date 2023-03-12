@@ -283,8 +283,9 @@ impl Nyasynth {
                     } else {
                         // If there is a generator playing, retrigger it. If the generator is release state
                         // then also do portamento.
-                        let bend_from_current = !self.notes.last().unwrap().is_released();
-                        let new_gen = self.notes.last_mut().unwrap().retrigger(
+                        let last_note = self.notes.last_mut().unwrap();
+                        let bend_from_current = !last_note.is_released();
+                        let new_gen = last_note.start_crossfade(
                             params,
                             sample_rate,
                             params.portamento_time,
@@ -325,7 +326,7 @@ impl Nyasynth {
                             (None, Some(_)) => (),
                             (Some(_), None) => (),
                             (Some(gen), Some((new_note, new_vel))) => {
-                                let new_gen = gen.retrigger(
+                                let new_gen = gen.start_crossfade(
                                     params,
                                     sample_rate,
                                     params.portamento_time,

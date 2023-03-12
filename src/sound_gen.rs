@@ -216,7 +216,7 @@ impl SoundGenerator {
         }
     }
 
-    pub fn retrigger(
+    pub fn start_crossfade(
         &mut self,
         params: &MeowParameters,
         sample_rate: SampleRate,
