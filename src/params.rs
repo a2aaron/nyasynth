@@ -154,53 +154,53 @@ impl MeowParameters {
 pub struct Parameters {
     // Public parameters (exposed in UI)
     #[id = "meow_attack"]
-    meow_attack: FloatParam, // Parameter<Seconds>,
+    pub meow_attack: FloatParam,
     #[id = "meow_decay"]
-    meow_decay: FloatParam, // Parameter<Seconds>,
+    pub meow_decay: FloatParam,
     #[id = "meow_sustain"]
-    meow_sustain: FloatParam, // Parameter<Decibel>,
+    pub meow_sustain: FloatParam,
     #[id = "meow_release"]
-    meow_release: FloatParam, // Parameter<Seconds>,
+    pub meow_release: FloatParam,
     #[id = "vibrato_amount"]
-    vibrato_amount: FloatParam, // Parameter<f32>,
+    pub vibrato_amount: FloatParam,
     #[id = "vibrato_attack"]
-    vibrato_attack: FloatParam, // Parameter<Seconds>,
+    pub vibrato_attack: FloatParam,
     #[id = "vibrato_rate"]
-    vibrato_rate: EnumParam<VibratoRate>, // Parameter<VibratoRate>,
+    pub vibrato_rate: EnumParam<VibratoRate>,
     #[id = "portamento_time"]
-    portamento_time: FloatParam, // Parameter<Seconds>,
+    pub portamento_time: FloatParam,
     #[id = "noise_mix"]
-    noise_mix: FloatParam, // Parameter<f32>,
+    pub noise_mix: FloatParam,
     #[id = "chorus_mix"]
-    chorus_mix: FloatParam, // Parameter<f32>,
+    pub chorus_mix: FloatParam,
     #[id = "pitch_bend"]
-    pitch_bend: IntParam, // Parameter<u8>,
+    pub pitch_bend: IntParam,
     #[id = "polycat"]
-    polycat: BoolParam, // Parameter<bool>,
+    pub polycat: BoolParam,
     // Internal parameter (not exposed by the original Meowsynth)
     #[id = "gain"]
-    gain: FloatParam, // Parameter<Decibel>,
+    gain: FloatParam,
     #[id = "filter_envlope_mod"]
-    filter_envlope_mod: FloatParam, // Parameter<Hertz>,
+    filter_envlope_mod: FloatParam,
     #[id = "filter_dry_wet"]
-    filter_dry_wet: FloatParam, // Parameter<f32>,
+    filter_dry_wet: FloatParam,
     #[id = "filter_q"]
-    filter_q: FloatParam, // Parameter<f32>,
+    filter_q: FloatParam,
     #[id = "filter_type"]
-    filter_type: EnumParam<FilterType>, // Parameter<FilterType>,
+    filter_type: EnumParam<FilterType>,
     #[id = "filter_cutoff_freq"]
-    filter_cutoff_freq: FloatParam, // Parameter<Hertz>,
+    filter_cutoff_freq: FloatParam,
     #[id = "chorus_depth"]
-    chorus_depth: FloatParam, // Parameter<f32>,
+    chorus_depth: FloatParam,
     #[id = "chorus_distance"]
-    chorus_distance: FloatParam, // Parameter<f32>,
+    chorus_distance: FloatParam,
     #[id = "chorus_rate"]
-    chorus_rate: FloatParam, // Parameter<Hertz>,
+    chorus_rate: FloatParam,
     // "Debug" parameters (these might become not "debug" pretty soon)
     #[id = "vibrato_note_shape"]
-    vibrato_note_shape: EnumParam<NoteShape>, // Parameter<NoteShape>,
+    vibrato_note_shape: EnumParam<NoteShape>,
     #[id = "chorus_note_shape"]
-    chorus_note_shape: EnumParam<NoteShape>, // Parameter<NoteShape>,
+    chorus_note_shape: EnumParam<NoteShape>,
 }
 
 impl Default for Parameters {
@@ -479,7 +479,7 @@ impl EnvelopeParams<f32> for VibratoEnvelopeParams {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Enum)]
-enum VibratoRate {
+pub enum VibratoRate {
     #[name = "4 bar"]
     FourBar,
     #[name = "2 bar"]

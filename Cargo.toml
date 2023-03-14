@@ -12,6 +12,7 @@ edition = "2021"
 # can implement a minimal host. Additionally, this adds a method to ProcessContext to allow peeking
 # of events.
 nih_plug = { git = "https://github.com/a2aaron/nih-plug.git", rev = "2ecc194e461de1bdbc117d86449b2fb30fafb356", features = ["vst3", "standalone"]}
+nih_plug_egui = { git = "https://github.com/a2aaron/nih-plug.git", rev = "2ecc194e461de1bdbc117d86449b2fb30fafb356" }
 # nih_plug = { path = "../nih-plug", features = ["vst3", "standalone"]}
 derive_more = "0.99"
 biquad = "0.4.0"

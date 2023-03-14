@@ -10,6 +10,7 @@ mod keys;
 mod neighbor_pairs;
 mod params;
 mod sound_gen;
+mod ui;
 
 use std::sync::Arc;
 
@@ -87,9 +88,7 @@ impl Plugin for Nyasynth {
         context: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
         let sample_rate = SampleRate(context.transport().sample_rate);
-        if sample_rate != self.sample_rate {
-            self.set_sample_rate(sample_rate);
-        }
+        self.set_sample_rate(sample_rate);
 
         let num_samples = buffer.samples();
         let tempo = context.transport().tempo.unwrap_or(120.0) as f32;
@@ -224,7 +223,7 @@ impl Plugin for Nyasynth {
     }
 
     fn editor(&self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
-        None
+        ui::get_editor(self.params.clone())
     }
 }
 impl Default for Nyasynth {
@@ -251,8 +250,10 @@ impl Vst3Plugin for Nyasynth {
 
 impl Nyasynth {
     fn set_sample_rate(&mut self, sample_rate: SampleRate) {
-        self.sample_rate = sample_rate;
-        self.chorus.set_sample_rate(sample_rate);
+        if sample_rate != self.sample_rate {
+            self.sample_rate = sample_rate;
+            self.chorus.set_sample_rate(sample_rate);
+        }
     }
 
     fn process_event(
