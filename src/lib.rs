@@ -11,6 +11,7 @@ mod neighbor_pairs;
 mod params;
 mod sound_gen;
 mod ui;
+mod ui_knob;
 
 use std::sync::Arc;
 
