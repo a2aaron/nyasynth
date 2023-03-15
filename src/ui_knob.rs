@@ -25,7 +25,7 @@ impl<'a, P: Param> ArcKnob<'a, P> {
 
 impl<'a, P: Param> Widget for ArcKnob<'a, P> {
     fn ui(self, ui: &mut Ui) -> Response {
-        let size = vec2(self.radius * 2.0 + 4.0, self.radius * 2.0 + 4.0);
+        let size = vec2(self.radius * 2.0, self.radius * 2.0);
         let response = ui.allocate_response(size, Sense::click_and_drag());
         if response.drag_started() {
             self.param_setter.begin_set_parameter(self.param);
@@ -51,8 +51,9 @@ impl<'a, P: Param> Widget for ArcKnob<'a, P> {
         painter.circle_filled(center, self.radius, Rgba::BLACK);
 
         // Draw the arc
-        let radius = self.radius - 4.0;
-        let stroke = Stroke::new(4.0, Rgba::RED);
+        let stroke_width = 6.0;
+        let radius = self.radius - stroke_width;
+        let stroke = Stroke::new(stroke_width, Rgba::from_rgb(1.0, 1.0, 0.0));
         let shape = Shape::Path(PathShape {
             points: get_arc_points(center, radius, value, 0.05),
             closed: false,
