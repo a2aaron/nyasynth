@@ -2,8 +2,8 @@ use std::f32::consts::TAU;
 
 use nih_plug::prelude::{Param, ParamSetter};
 use nih_plug_egui::egui::{
-    epaint::PathShape, pos2, vec2, Align2, Color32, FontId, Id, Pos2, Response, Rgba, Rounding,
-    Sense, Shape, Stroke, Ui, Vec2, Widget,
+    epaint::PathShape, pos2, vec2, Align2, Color32, FontId, Id, Pos2, Rect, Response, Rgba,
+    Rounding, Sense, Shape, Stroke, TextureHandle, Ui, Vec2, Widget,
 };
 use once_cell::sync::Lazy;
 
@@ -58,13 +58,19 @@ impl<'a, P: Param> SliderRegion<'a, P> {
 pub struct ArcKnob<'a, P: Param> {
     slider_region: SliderRegion<'a, P>,
     radius: f32,
+    knob_texture: TextureHandle,
 }
 
 impl<'a, P: Param> ArcKnob<'a, P> {
-    pub fn for_param(param: &'a P, param_setter: &'a ParamSetter) -> Self {
+    pub fn for_param(
+        param: &'a P,
+        param_setter: &'a ParamSetter,
+        knob_texture: TextureHandle,
+    ) -> Self {
         ArcKnob {
             slider_region: SliderRegion::new(param, param_setter),
             radius: 20.0,
+            knob_texture,
         }
     }
 }
@@ -77,15 +83,26 @@ impl<'a, P: Param> Widget for ArcKnob<'a, P> {
 
         let painter = ui.painter_at(response.rect);
         let center = response.rect.center();
-        // Draw the background for the knob
-        painter.circle_filled(center, self.radius, Rgba::BLACK);
 
+        let image = Shape::image(
+            self.knob_texture.id(),
+            response.rect,
+            Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
+            Color32::WHITE,
+        );
+        painter.add(image);
+        // Draw the background for the knob
+        // painter.circle_filled(center, self.radius, Rgba::BLACK);
+
+        // Draw the grey metal ball for the knob
+        // let grey: Rgba = Rgba::from_srgba_premultiplied(0x60, 0x60, 0x60, 0xFF); // #606060
+        // painter.circle_filled(center, self.radius / 4.0, grey);
         // Draw the arc
-        let stroke_width = 6.0;
-        let radius = self.radius - stroke_width;
+        let stroke_width = 5.0;
+        let radius = self.radius - stroke_width - 4.0;
         let stroke = Stroke::new(stroke_width, Rgba::from_rgb(1.0, 1.0, 0.0));
         let shape = Shape::Path(PathShape {
-            points: get_arc_points(center, radius, value, 0.05),
+            points: get_arc_points(center, radius, value, 0.03),
             closed: false,
             fill: Color32::TRANSPARENT,
             stroke,
