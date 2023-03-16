@@ -89,42 +89,49 @@ pub fn get_editor(params: Arc<Parameters>) -> Option<Box<dyn Editor>> {
                     ui.vertical(|ui| {
                         ui.add_space(18.0);
                         ui.label("MEOW ENVELOPE");
-                        ui.horizontal(|ui| {
-                            make_arc_knob_no_label(ui, param_setter, &params.meow_attack);
-                            make_arc_knob_no_label(ui, param_setter, &params.meow_decay);
-                            make_arc_knob_no_label(ui, param_setter, &params.meow_sustain);
-                            make_arc_knob_no_label(ui, param_setter, &params.meow_release);
+                        ui.vertical(|ui| {
+                            ui.horizontal(|ui| {
+                                make_arc_knob_no_label(ui, param_setter, &params.meow_attack);
+                                make_arc_knob_no_label(ui, param_setter, &params.meow_decay);
+                                make_arc_knob_no_label(ui, param_setter, &params.meow_sustain);
+                                make_arc_knob_no_label(ui, param_setter, &params.meow_release);
+                            });
+                            ui.label("VIBRATO");
+                            ui.horizontal(|ui| {
+                                make_arc_knob(ui, param_setter, "AMNT", &params.vibrato_amount);
+                                make_arc_knob(ui, param_setter, "ATCK", &params.vibrato_attack);
+                                make_text_slider(
+                                    ui,
+                                    param_setter,
+                                    "SPEED",
+                                    &params.vibrato_rate,
+                                    vec2(64.0, 25.0),
+                                );
+                            });
+                            ui.horizontal(|ui| {
+                                make_arc_knob(ui, param_setter, "PORTA", &params.portamento_time);
+                                make_arc_knob(ui, param_setter, "NOISE", &params.noise_mix);
+                                make_arc_knob(ui, param_setter, "CHORUS", &params.chorus_mix);
+                                make_text_slider(
+                                    ui,
+                                    param_setter,
+                                    "P. BEND",
+                                    &params.pitch_bend,
+                                    vec2(25.0, 25.0),
+                                );
+                            });
+                            ui.vertical_centered(|ui| {
+                                let polycat_text = RichText::new("POLYCAT").size(32.0);
+                                let button =
+                                    ui.toggle_value(&mut editor_state.polycat_state, polycat_text);
+                                if button.clicked() {
+                                    param_setter.begin_set_parameter(&params.polycat);
+                                    param_setter
+                                        .set_parameter(&params.polycat, editor_state.polycat_state);
+                                    param_setter.end_set_parameter(&params.polycat);
+                                }
+                            })
                         });
-                        ui.label("VIBRATO");
-                        ui.horizontal(|ui| {
-                            make_arc_knob(ui, param_setter, "AMNT", &params.vibrato_amount);
-                            make_arc_knob(ui, param_setter, "ATCK", &params.vibrato_attack);
-                            make_text_slider(
-                                ui,
-                                param_setter,
-                                "SPEED",
-                                &params.vibrato_rate,
-                                vec2(64.0, 25.0),
-                            );
-                        });
-                        ui.horizontal(|ui| {
-                            make_arc_knob(ui, param_setter, "PORTA", &params.portamento_time);
-                            make_arc_knob(ui, param_setter, "NOISE", &params.noise_mix);
-                            make_arc_knob(ui, param_setter, "CHORUS", &params.chorus_mix);
-                            make_text_slider(
-                                ui,
-                                param_setter,
-                                "P. BEND",
-                                &params.pitch_bend,
-                                vec2(25.0, 25.0),
-                            );
-                        });
-                        let button = ui.toggle_value(&mut editor_state.polycat_state, "POLYCAT");
-                        if button.clicked() {
-                            param_setter.begin_set_parameter(&params.polycat);
-                            param_setter.set_parameter(&params.polycat, editor_state.polycat_state);
-                            param_setter.end_set_parameter(&params.polycat);
-                        }
                     });
                 });
             });
