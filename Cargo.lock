@@ -1329,6 +1329,7 @@ dependencies = [
  "midly",
  "nih_plug",
  "nih_plug_egui",
+ "once_cell",
  "ordered-float",
  "wav",
 ]

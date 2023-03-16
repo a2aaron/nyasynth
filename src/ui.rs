@@ -3,11 +3,14 @@ use std::sync::Arc;
 use nih_plug::prelude::{Editor, Param, ParamSetter};
 use nih_plug_egui::{
     create_egui_editor,
-    egui::{self, vec2, ColorImage, Label, Rgba, RichText, TextureHandle, Ui, WidgetText},
+    egui::{self, vec2, ColorImage, Label, Rgba, RichText, TextureHandle, Ui, Vec2, WidgetText},
     EguiState,
 };
 
-use crate::{params::Parameters, ui_knob::ArcKnob};
+use crate::{
+    params::Parameters,
+    ui_knob::{ArcKnob, TextSlider},
+};
 
 const YELLOW: Rgba = Rgba::from_rgb(1.0, 1.0, 0.0);
 
@@ -27,18 +30,16 @@ fn make_arc_knob(
     });
 }
 
-fn make_slider(
+fn make_text_slider(
     ui: &mut Ui,
     param_setter: &ParamSetter,
     label: impl Into<WidgetText>,
     param: &impl Param,
+    size: Vec2,
 ) {
     ui.vertical(|ui| {
         ui.label(label);
-        ui.add(nih_plug_egui::widgets::ParamSlider::for_param(
-            param,
-            param_setter,
-        ));
+        ui.add(TextSlider::for_param(param, param_setter, size));
     });
 }
 
@@ -98,13 +99,25 @@ pub fn get_editor(params: Arc<Parameters>) -> Option<Box<dyn Editor>> {
                         ui.horizontal(|ui| {
                             make_arc_knob(ui, param_setter, "AMNT", &params.vibrato_amount);
                             make_arc_knob(ui, param_setter, "ATCK", &params.vibrato_attack);
-                            make_slider(ui, param_setter, "SPEED", &params.vibrato_rate);
+                            make_text_slider(
+                                ui,
+                                param_setter,
+                                "SPEED",
+                                &params.vibrato_rate,
+                                vec2(64.0, 25.0),
+                            );
                         });
                         ui.horizontal(|ui| {
                             make_arc_knob(ui, param_setter, "PORTA", &params.portamento_time);
                             make_arc_knob(ui, param_setter, "NOISE", &params.noise_mix);
                             make_arc_knob(ui, param_setter, "CHORUS", &params.chorus_mix);
-                            make_slider(ui, param_setter, "P. BEND", &params.pitch_bend);
+                            make_text_slider(
+                                ui,
+                                param_setter,
+                                "P. BEND",
+                                &params.pitch_bend,
+                                vec2(25.0, 25.0),
+                            );
                         });
                         let button = ui.toggle_value(&mut editor_state.polycat_state, "POLYCAT");
                         if button.clicked() {

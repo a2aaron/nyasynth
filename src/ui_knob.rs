@@ -2,22 +2,68 @@ use std::f32::consts::TAU;
 
 use nih_plug::prelude::{Param, ParamSetter};
 use nih_plug_egui::egui::{
-    epaint::PathShape, pos2, vec2, Color32, Pos2, Response, Rgba, Sense, Shape, Stroke, Ui, Widget,
+    epaint::PathShape, pos2, vec2, Align2, Color32, FontId, Id, Pos2, Response, Rgba, Rounding,
+    Sense, Shape, Stroke, Ui, Vec2, Widget,
 };
+use once_cell::sync::Lazy;
 
 use crate::ease::lerp;
 
-pub struct ArcKnob<'a, P: Param> {
+static DRAG_AMOUNT_MEMORY_ID: Lazy<Id> = Lazy::new(|| Id::new("drag_amount_memory_id"));
+
+struct SliderRegion<'a, P: Param> {
     param: &'a P,
     param_setter: &'a ParamSetter<'a>,
+}
+
+impl<'a, P: Param> SliderRegion<'a, P> {
+    fn new(param: &'a P, param_setter: &'a ParamSetter) -> Self {
+        SliderRegion {
+            param,
+            param_setter,
+        }
+    }
+
+    // Handle the input for a given response. Returns an f32 containing the normalized value of
+    // the parameter.
+    fn handle_response(&self, ui: &Ui, response: &Response) -> f32 {
+        let value = self.param.unmodulated_normalized_value();
+        if response.drag_started() {
+            self.param_setter.begin_set_parameter(self.param);
+            ui.memory().data.insert_temp(*DRAG_AMOUNT_MEMORY_ID, value)
+        }
+
+        if response.dragged() {
+            // Invert the y axis, since we want dragging up to increase the value and down to
+            // decrease it, but drag_delta() has the y-axis increasing downwards.
+            let delta = -response.drag_delta().y;
+            let mut memory = ui.memory();
+            let value = memory.data.get_temp_mut_or(*DRAG_AMOUNT_MEMORY_ID, value);
+            *value = (*value + delta / 100.0).clamp(0.0, 1.0);
+            self.param_setter
+                .set_parameter_normalized(self.param, *value);
+        }
+
+        if response.drag_released() {
+            self.param_setter.end_set_parameter(self.param);
+        }
+        value
+    }
+
+    fn get_string(&self) -> String {
+        self.param.to_string()
+    }
+}
+
+pub struct ArcKnob<'a, P: Param> {
+    slider_region: SliderRegion<'a, P>,
     radius: f32,
 }
 
 impl<'a, P: Param> ArcKnob<'a, P> {
     pub fn for_param(param: &'a P, param_setter: &'a ParamSetter) -> Self {
         ArcKnob {
-            param,
-            param_setter,
+            slider_region: SliderRegion::new(param, param_setter),
             radius: 20.0,
         }
     }
@@ -27,23 +73,7 @@ impl<'a, P: Param> Widget for ArcKnob<'a, P> {
     fn ui(self, ui: &mut Ui) -> Response {
         let size = vec2(self.radius * 2.0, self.radius * 2.0);
         let response = ui.allocate_response(size, Sense::click_and_drag());
-        if response.drag_started() {
-            self.param_setter.begin_set_parameter(self.param);
-        }
-
-        let value = self.param.unmodulated_normalized_value();
-        if response.dragged() {
-            // Invert the y axis, since we want dragging up to increase the value and down to
-            // decrease it, but drag_delta() has the y-axis increasing downwards.
-            let delta = -response.drag_delta().y;
-            let new_value = (value + delta / 100.0).clamp(0.0, 1.0);
-            self.param_setter
-                .set_parameter_normalized(self.param, new_value);
-        }
-
-        if response.drag_released() {
-            self.param_setter.end_set_parameter(self.param);
-        }
+        let value = self.slider_region.handle_response(&ui, &response);
 
         let painter = ui.painter_at(response.rect);
         let center = response.rect.center();
@@ -81,4 +111,41 @@ fn get_arc_points(center: Pos2, radius: f32, value: f32, max_arc_distance: f32) 
             pos2(x, y) + center.to_vec2()
         })
         .collect()
+}
+
+pub struct TextSlider<'a, P: Param> {
+    slider_region: SliderRegion<'a, P>,
+    size: Vec2,
+}
+
+impl<'a, P: Param> TextSlider<'a, P> {
+    pub fn for_param(param: &'a P, param_setter: &'a ParamSetter, size: Vec2) -> Self {
+        TextSlider {
+            slider_region: SliderRegion::new(param, param_setter),
+            size,
+        }
+    }
+}
+
+impl<'a, P: Param> Widget for TextSlider<'a, P> {
+    fn ui(self, ui: &mut Ui) -> Response {
+        let bg_grey: Rgba = Rgba::from_srgba_premultiplied(0x60, 0x60, 0x60, 0xFF); // #606060
+
+        let response = ui.allocate_response(self.size, Sense::click_and_drag());
+        self.slider_region.handle_response(&ui, &response);
+
+        let painter = ui.painter_at(response.rect);
+        let center = response.rect.center();
+        // Draw the background for the text
+        let stroke = Stroke::default();
+        painter.rect(response.rect, Rounding::same(1.0), bg_grey, stroke);
+
+        // Draw the text
+        let text = self.slider_region.get_string();
+        let anchor = Align2::CENTER_CENTER;
+        let color = Color32::from(Rgba::WHITE);
+        let font = FontId::default();
+        painter.text(center, anchor, text, font, color);
+        response
+    }
 }

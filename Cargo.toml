@@ -24,6 +24,7 @@ atomic_float = "0.1.0"
 midly = "0.5.3"
 wav = "1.0.0"
 clap = { version = "4.1.8", features = ["derive"] }
+once_cell = "1.17.1"
 
 [profile.release]
 incremental = true

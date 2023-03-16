@@ -301,8 +301,7 @@ impl Parameters {
                 "Pitchbend",
                 DEFAULT_PITCHBEND as i32,
                 IntRange::Linear { min: 1, max: 12 },
-            )
-            .with_unit(" semis"),
+            ),
             polycat: BoolParam::new("Polycat", DEFAULT_POLYCAT)
                 .with_value_to_string(Arc::new(polycat_formatter)),
             // Internal parameters (might not be exposed)
