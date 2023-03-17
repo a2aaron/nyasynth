@@ -4,7 +4,8 @@ use nih_plug::prelude::{Editor, Param, ParamSetter};
 use nih_plug_egui::{
     create_egui_editor,
     egui::{
-        self, vec2, ColorImage, Frame, Label, Rgba, RichText, TextureHandle, Ui, Vec2, WidgetText,
+        self, pos2, vec2, Color32, ColorImage, Frame, Label, Rect, Rgba, RichText, Shape,
+        TextureHandle, Ui, Vec2, WidgetText,
     },
     EguiState,
 };
@@ -61,6 +62,7 @@ struct EditorContext<'a> {
 struct EditorState {
     cat_image: Option<TextureHandle>,
     metal_knob: Option<TextureHandle>,
+    brushed_metal: Option<TextureHandle>,
     polycat_state: bool,
 }
 
@@ -71,6 +73,10 @@ impl EditorState {
 
     fn metal_knob(&self) -> TextureHandle {
         self.metal_knob.clone().unwrap()
+    }
+
+    fn brushed_metal(&self) -> TextureHandle {
+        self.brushed_metal.clone().unwrap()
     }
 }
 
@@ -87,6 +93,7 @@ pub fn get_editor(params: Arc<Parameters>) -> Option<Box<dyn Editor>> {
     let user_state = EditorState {
         cat_image: None,
         metal_knob: None,
+        brushed_metal: None,
         polycat_state: params.polycat.value(),
     };
 
@@ -101,7 +108,12 @@ pub fn get_editor(params: Arc<Parameters>) -> Option<Box<dyn Editor>> {
             let knob_texture =
                 load_image_from_memory(include_bytes!("../assets/metal_knob_color.png")).unwrap();
             editor_state.metal_knob =
-                Some(cx.load_texture("metal-knob", knob_texture, egui::TextureFilter::Linear))
+                Some(cx.load_texture("metal-knob", knob_texture, egui::TextureFilter::Linear));
+
+            let brushed_metal =
+                load_image_from_memory(include_bytes!("../assets/brushed_metal.png")).unwrap();
+            editor_state.brushed_metal =
+                Some(cx.load_texture("metal-knob", brushed_metal, egui::TextureFilter::Linear));
         },
         move |cx, param_setter, editor_state| {
             cx.set_debug_on_hover(true);
@@ -111,6 +123,14 @@ pub fn get_editor(params: Arc<Parameters>) -> Option<Box<dyn Editor>> {
                         .fill(Rgba::from_srgba_premultiplied(0x89, 0xA9, 0xBD, 0xFF).into()),
                 )
                 .show(cx, |ui| {
+                    let background = Shape::image(
+                        editor_state.brushed_metal().id(),
+                        ui.max_rect(),
+                        Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
+                        Color32::WHITE,
+                    );
+                    ui.painter().add(background);
+
                     ui.horizontal(|ui| {
                         ui.add_space(16.0);
                         ui.vertical(|ui| {
