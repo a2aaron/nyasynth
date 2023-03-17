@@ -4,8 +4,8 @@ use nih_plug::prelude::{Editor, Param, ParamSetter};
 use nih_plug_egui::{
     create_egui_editor,
     egui::{
-        self, pos2, vec2, Color32, ColorImage, Frame, Pos2, Rect, Rgba, RichText, Sense, Shape,
-        TextureHandle, TextureId, Ui, Vec2,
+        self, pos2, vec2, Color32, ColorImage, Frame, Pos2, Rect, Rgba, Sense, Shape,
+        TextureHandle, Ui, Vec2,
     },
     EguiState,
 };
@@ -18,16 +18,10 @@ use crate::{
 const SCREEN_WIDTH: u32 = 450;
 const SCREEN_HEIGHT: u32 = 300;
 
-fn make_arc_knob(ui: &mut Ui, ctx: &EditorContext, param: &impl Param, center: Pos2) {
+fn make_arc_knob(ui: &mut Ui, param_setter: &ParamSetter, param: &impl Param, center: Pos2) {
     // Knobs are 140.0x140.0 px, but need to scaled down by a factor of 4.
     let radius = 140.0 / 2.0 / 4.0;
-    ui.add(ArcKnob::for_param(
-        param,
-        ctx.param_setter,
-        ctx.editor.metal_knob(),
-        radius,
-        center,
-    ));
+    ui.add(ArcKnob::for_param(param, param_setter, radius, center));
 }
 
 fn make_text_slider(ui: &mut Ui, param_setter: &ParamSetter, param: &impl Param, location: Rect) {
@@ -48,7 +42,6 @@ struct WidgetLocations {
     pitch_bend: Rect,
     polycat_button: Rect,
     polycat_on: Rect,
-    polycat_off: Rect,
     cat_image: Rect,
 }
 impl WidgetLocations {
@@ -129,8 +122,8 @@ impl WidgetLocations {
         let original_size = (bg.width, bg.height);
 
         nih_plug::nih_log!(
-            "center: {:?}",
-            get_data(default, "Meow Attack Knob").center(original_size)
+            "rect: {:?}",
+            get_data(default, "Image Emboss").as_rect(original_size)
         );
 
         WidgetLocations {
@@ -147,23 +140,15 @@ impl WidgetLocations {
             pitch_bend: get_data(default, "Pitchbend Emboss").as_rect(original_size),
             polycat_button: get_data(default, "Polycat BG").as_rect(original_size),
             polycat_on: get_data(default, "POLYCAT ON").as_rect(original_size),
-            polycat_off: get_data(default, "POLYCAT OFF").as_rect(original_size),
             cat_image: get_data(default, "Image Emboss").as_rect(original_size),
         }
     }
 }
 
-struct EditorContext<'a> {
-    editor: &'a EditorState,
-    param_setter: &'a ParamSetter<'a>,
-}
-
 struct EditorState {
     cat_image: Option<TextureHandle>,
-    metal_knob: Option<TextureHandle>,
     brushed_metal: Option<TextureHandle>,
     polycat_on: Option<TextureHandle>,
-    polycat_off: Option<TextureHandle>,
     polycat_state: bool,
     widget_location: WidgetLocations,
 }
@@ -173,20 +158,12 @@ impl EditorState {
         self.cat_image.clone().unwrap()
     }
 
-    fn metal_knob(&self) -> TextureHandle {
-        self.metal_knob.clone().unwrap()
-    }
-
     fn brushed_metal(&self) -> TextureHandle {
         self.brushed_metal.clone().unwrap()
     }
 
     fn polycat_on(&self) -> TextureHandle {
         self.polycat_on.clone().unwrap()
-    }
-
-    fn polycat_off(&self) -> TextureHandle {
-        self.polycat_off.clone().unwrap()
     }
 }
 
@@ -202,10 +179,8 @@ pub fn get_editor(params: Arc<Parameters>) -> Option<Box<dyn Editor>> {
     let egui_state = EguiState::from_size(SCREEN_WIDTH, SCREEN_HEIGHT);
     let user_state = EditorState {
         cat_image: None,
-        metal_knob: None,
         brushed_metal: None,
         polycat_on: None,
-        polycat_off: None,
         polycat_state: params.polycat.value(),
         widget_location: WidgetLocations::from_spine_json(
             serde_json::from_str(include_str!("../assets/spine_json/Spine.json")).unwrap(),
@@ -222,10 +197,6 @@ pub fn get_editor(params: Arc<Parameters>) -> Option<Box<dyn Editor>> {
             let image = ColorImage::example();
             editor_state.cat_image = load_image("cat-image", image);
 
-            let knob_texture =
-                load_image_from_memory(include_bytes!("../assets/metal_knob_color.png")).unwrap();
-            editor_state.metal_knob = load_image("metal-knob", knob_texture);
-
             let brushed_metal =
                 load_image_from_memory(include_bytes!("../assets/ui_2x_v2.png")).unwrap();
             editor_state.brushed_metal = load_image("metal-knob", brushed_metal);
@@ -234,11 +205,6 @@ pub fn get_editor(params: Arc<Parameters>) -> Option<Box<dyn Editor>> {
                 load_image_from_memory(include_bytes!("../assets/spine_json/POLYCAT ON.png"))
                     .unwrap();
             editor_state.polycat_on = load_image("polycat-on", polycat_on);
-
-            let polycat_off =
-                load_image_from_memory(include_bytes!("../assets/spine_json/POLYCAT OFF.png"))
-                    .unwrap();
-            editor_state.polycat_off = load_image("polycat-off", polycat_off);
         },
         move |cx, param_setter, editor_state| {
             cx.set_debug_on_hover(true);
@@ -248,52 +214,44 @@ pub fn get_editor(params: Arc<Parameters>) -> Option<Box<dyn Editor>> {
                         .fill(Rgba::from_srgba_premultiplied(0x89, 0xA9, 0xBD, 0xFF).into()),
                 )
                 .show(cx, |ui| {
-                    let background = Shape::image(
-                        editor_state.brushed_metal().id(),
-                        ui.max_rect(),
-                        Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
-                        Color32::WHITE,
-                    );
+                    let background = image_shape(editor_state.brushed_metal(), ui.max_rect());
                     ui.painter().add(background);
 
                     ui.horizontal(|ui| {
                         ui.vertical(|ui| {
-                            ui.image(
-                                &editor_state.cat_image(),
-                                editor_state.widget_location.cat_image.size(),
+                            let image = image_shape(
+                                editor_state.cat_image(),
+                                editor_state.widget_location.cat_image,
                             );
+                            ui.painter().add(image);
                         });
                         ui.vertical(|ui| {
                             ui.vertical(|ui| {
                                 {
                                     let locations = &editor_state.widget_location;
-                                    let ctx = EditorContext {
-                                        editor: &editor_state,
-                                        param_setter,
-                                    };
 
                                     ui.horizontal(|ui| {
                                         make_arc_knob(
                                             ui,
-                                            &ctx,
+                                            &param_setter,
                                             &params.meow_attack,
                                             locations.meow_attack,
                                         );
                                         make_arc_knob(
                                             ui,
-                                            &ctx,
+                                            &param_setter,
                                             &params.meow_decay,
                                             locations.meow_decay,
                                         );
                                         make_arc_knob(
                                             ui,
-                                            &ctx,
+                                            &param_setter,
                                             &params.meow_sustain,
                                             locations.meow_sustain,
                                         );
                                         make_arc_knob(
                                             ui,
-                                            &ctx,
+                                            &param_setter,
                                             &params.meow_release,
                                             locations.meow_release,
                                         );
@@ -301,13 +259,13 @@ pub fn get_editor(params: Arc<Parameters>) -> Option<Box<dyn Editor>> {
                                     ui.horizontal(|ui| {
                                         make_arc_knob(
                                             ui,
-                                            &ctx,
+                                            &param_setter,
                                             &params.vibrato_amount,
                                             locations.vibrato_amount,
                                         );
                                         make_arc_knob(
                                             ui,
-                                            &ctx,
+                                            &param_setter,
                                             &params.vibrato_attack,
                                             locations.vibrato_attack,
                                         );
@@ -321,19 +279,19 @@ pub fn get_editor(params: Arc<Parameters>) -> Option<Box<dyn Editor>> {
                                     ui.horizontal(|ui| {
                                         make_arc_knob(
                                             ui,
-                                            &ctx,
+                                            &param_setter,
                                             &params.portamento_time,
                                             locations.portamento_time,
                                         );
                                         make_arc_knob(
                                             ui,
-                                            &ctx,
+                                            &param_setter,
                                             &params.noise_mix,
                                             locations.noise_mix,
                                         );
                                         make_arc_knob(
                                             ui,
-                                            &ctx,
+                                            &param_setter,
                                             &params.chorus_mix,
                                             locations.chorus_mix,
                                         );
@@ -358,19 +316,14 @@ pub fn get_editor(params: Arc<Parameters>) -> Option<Box<dyn Editor>> {
                                             editor_state.polycat_state,
                                         );
                                         param_setter.end_set_parameter(&params.polycat);
-                                        let shape = if editor_state.polycat_state {
-                                            image_shape(
-                                                editor_state.polycat_on(),
-                                                editor_state.widget_location.polycat_on,
-                                            )
-                                        } else {
-                                            image_shape(
-                                                editor_state.polycat_off(),
-                                                editor_state.widget_location.polycat_off,
-                                            )
-                                        };
-                                        ui.painter().add(shape);
                                     }
+                                    if editor_state.polycat_state {
+                                        let shape = image_shape(
+                                            editor_state.polycat_on(),
+                                            editor_state.widget_location.polycat_on,
+                                        );
+                                        ui.painter().add(shape);
+                                    };
                                     button
                                 });
                             });

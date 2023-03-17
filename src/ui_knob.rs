@@ -3,7 +3,7 @@ use std::f32::consts::TAU;
 use nih_plug::prelude::{Param, ParamSetter};
 use nih_plug_egui::egui::{
     epaint::PathShape, pos2, vec2, Align2, Color32, FontId, Id, Pos2, Rect, Response, Rgba, Sense,
-    Shape, Stroke, TextureHandle, Ui, Widget,
+    Shape, Stroke, Ui, Widget,
 };
 use once_cell::sync::Lazy;
 
@@ -58,22 +58,14 @@ impl<'a, P: Param> SliderRegion<'a, P> {
 pub struct ArcKnob<'a, P: Param> {
     slider_region: SliderRegion<'a, P>,
     radius: f32,
-    knob_texture: TextureHandle,
     center: Pos2,
 }
 
 impl<'a, P: Param> ArcKnob<'a, P> {
-    pub fn for_param(
-        param: &'a P,
-        param_setter: &'a ParamSetter,
-        knob_texture: TextureHandle,
-        radius: f32,
-        pos: Pos2,
-    ) -> Self {
+    pub fn for_param(param: &'a P, param_setter: &'a ParamSetter, radius: f32, pos: Pos2) -> Self {
         ArcKnob {
             slider_region: SliderRegion::new(param, param_setter),
             radius,
-            knob_texture,
             center: pos,
         }
     }
@@ -89,19 +81,6 @@ impl<'a, P: Param> Widget for ArcKnob<'a, P> {
         let painter = ui.painter_at(response.rect);
         let center = response.rect.center();
 
-        // let image = Shape::image(
-        //     self.knob_texture.id(),
-        //     response.rect,
-        //     Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
-        //     Color32::WHITE,
-        // );
-        // painter.add(image);
-        // Draw the background for the knob
-        // painter.circle_filled(center, self.radius, Rgba::BLACK);
-
-        // Draw the grey metal ball for the knob
-        // let grey: Rgba = Rgba::from_srgba_premultiplied(0x60, 0x60, 0x60, 0xFF); // #606060
-        // painter.circle_filled(center, self.radius / 4.0, grey);
         // Draw the arc
         let stroke_width = 5.0;
         let radius = self.radius - stroke_width - 4.0;
@@ -151,16 +130,11 @@ impl<'a, P: Param> TextSlider<'a, P> {
 
 impl<'a, P: Param> Widget for TextSlider<'a, P> {
     fn ui(self, ui: &mut Ui) -> Response {
-        let bg_grey: Rgba = Rgba::from_srgba_premultiplied(0x60, 0x60, 0x60, 0xFF); // #606060
-
         let response = ui.allocate_rect(self.location, Sense::click_and_drag());
         self.slider_region.handle_response(&ui, &response);
 
         let painter = ui.painter_at(self.location);
         let center = self.location.center();
-        // Draw the background for the text
-        // let stroke = Stroke::default();
-        // painter.rect(response.rect, Rounding::same(1.0), bg_grey, stroke);
 
         // Draw the text
         let text = self.slider_region.get_string();
