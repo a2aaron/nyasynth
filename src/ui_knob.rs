@@ -83,7 +83,7 @@ impl<'a, P: Param> Widget for ArcKnob<'a, P> {
 
         // Draw the arc
         let stroke_width = 5.0;
-        let radius = self.radius - stroke_width - 4.0;
+        let radius = self.radius - stroke_width - 2.0;
         let stroke = Stroke::new(stroke_width, Rgba::from_rgb(1.0, 1.0, 0.0));
         let shape = Shape::Path(PathShape {
             points: get_arc_points(center, radius, value, 0.03),
