@@ -1,0 +1,42 @@
+{"skeleton":{"images":""},
+"bones":[{"name":"root"}],
+"slots":[
+	{"name":"Image Emboss","bone":"root","attachment":"Image Emboss"},
+	{"name":"Polycat BG","bone":"root","attachment":"Polycat BG"},
+	{"name":"POLYCAT OFF","bone":"root","attachment":"POLYCAT OFF"},
+	{"name":"POLYCAT ON","bone":"root","attachment":"POLYCAT ON"},
+	{"name":"Pitchbend Emboss","bone":"root","attachment":"Pitchbend Emboss"},
+	{"name":"Chorus Knob","bone":"root","attachment":"Chorus Knob"},
+	{"name":"Noise Knob","bone":"root","attachment":"Noise Knob"},
+	{"name":"Portamento Knob","bone":"root","attachment":"Portamento Knob"},
+	{"name":"Vibrato Speed Emboss","bone":"root","attachment":"Vibrato Speed Emboss"},
+	{"name":"Vibrato Attack Knob","bone":"root","attachment":"Vibrato Attack Knob"},
+	{"name":"Vibrato Amount Knob","bone":"root","attachment":"Vibrato Amount Knob"},
+	{"name":"Meow Release Knob","bone":"root","attachment":"Meow Release Knob"},
+	{"name":"Meow Sustain Knob","bone":"root","attachment":"Meow Sustain Knob"},
+	{"name":"Meow Decay Knob","bone":"root","attachment":"Meow Decay Knob"},
+	{"name":"Meow Attack Knob","bone":"root","attachment":"Meow Attack Knob"},
+	{"name":"background","bone":"root","attachment":"background"}
+],
+"skins":{
+	"default":{
+		"Image Emboss":{"Image Emboss":{"x":445,"y":827.5,"width":760,"height":651}},
+		"Polycat BG":{"Polycat BG":{"x":1315,"y":145,"width":838,"height":158}},
+		"POLYCAT OFF":{"POLYCAT OFF":{"x":1315,"y":147,"width":384,"height":66}},
+		"POLYCAT ON":{"POLYCAT ON":{"x":1315,"y":147,"width":440,"height":120}},
+		"Pitchbend Emboss":{"Pitchbend Emboss":{"x":1605,"y":350,"width":118,"height":118}},
+		"Chorus Knob":{"Chorus Knob":{"x":1413,"y":350,"width":140,"height":140}},
+		"Noise Knob":{"Noise Knob":{"x":1221,"y":350,"width":140,"height":140}},
+		"Portamento Knob":{"Portamento Knob":{"x":1029,"y":350,"width":140,"height":140}},
+		"Vibrato Speed Emboss":{"Vibrato Speed Emboss":{"x":1523,"y":645,"width":256,"height":106}},
+		"Vibrato Attack Knob":{"Vibrato Attack Knob":{"x":1221,"y":645,"width":140,"height":140}},
+		"Vibrato Amount Knob":{"Vibrato Amount Knob":{"x":1029,"y":645,"width":140,"height":140}},
+		"Meow Release Knob":{"Meow Release Knob":{"x":1605,"y":990,"width":140,"height":140}},
+		"Meow Sustain Knob":{"Meow Sustain Knob":{"x":1413,"y":990,"width":140,"height":140}},
+		"Meow Decay Knob":{"Meow Decay Knob":{"x":1221,"y":990,"width":140,"height":140}},
+		"Meow Attack Knob":{"Meow Attack Knob":{"x":1029,"y":990,"width":140,"height":140}},
+		"background":{"background":{"x":900,"y":600,"width":1800,"height":1200}}
+	}
+},
+"animations":{"animation":{}}
+}

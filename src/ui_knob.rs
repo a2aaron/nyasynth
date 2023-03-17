@@ -2,8 +2,8 @@ use std::f32::consts::TAU;
 
 use nih_plug::prelude::{Param, ParamSetter};
 use nih_plug_egui::egui::{
-    epaint::PathShape, pos2, vec2, Align2, Color32, FontId, Id, Pos2, Rect, Response, Rgba,
-    Rounding, Sense, Shape, Stroke, TextureHandle, Ui, Vec2, Widget,
+    epaint::PathShape, pos2, vec2, Align2, Color32, FontId, Id, Pos2, Rect, Response, Rgba, Sense,
+    Shape, Stroke, TextureHandle, Ui, Widget,
 };
 use once_cell::sync::Lazy;
 
@@ -59,6 +59,7 @@ pub struct ArcKnob<'a, P: Param> {
     slider_region: SliderRegion<'a, P>,
     radius: f32,
     knob_texture: TextureHandle,
+    center: Pos2,
 }
 
 impl<'a, P: Param> ArcKnob<'a, P> {
@@ -66,11 +67,14 @@ impl<'a, P: Param> ArcKnob<'a, P> {
         param: &'a P,
         param_setter: &'a ParamSetter,
         knob_texture: TextureHandle,
+        radius: f32,
+        pos: Pos2,
     ) -> Self {
         ArcKnob {
             slider_region: SliderRegion::new(param, param_setter),
-            radius: 20.0,
+            radius,
             knob_texture,
+            center: pos,
         }
     }
 }
@@ -78,19 +82,20 @@ impl<'a, P: Param> ArcKnob<'a, P> {
 impl<'a, P: Param> Widget for ArcKnob<'a, P> {
     fn ui(self, ui: &mut Ui) -> Response {
         let size = vec2(self.radius * 2.0, self.radius * 2.0);
-        let response = ui.allocate_response(size, Sense::click_and_drag());
+        let rect = Rect::from_center_size(self.center, size);
+        let response = ui.allocate_rect(rect, Sense::click_and_drag());
         let value = self.slider_region.handle_response(&ui, &response);
 
         let painter = ui.painter_at(response.rect);
         let center = response.rect.center();
 
-        let image = Shape::image(
-            self.knob_texture.id(),
-            response.rect,
-            Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
-            Color32::WHITE,
-        );
-        painter.add(image);
+        // let image = Shape::image(
+        //     self.knob_texture.id(),
+        //     response.rect,
+        //     Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
+        //     Color32::WHITE,
+        // );
+        // painter.add(image);
         // Draw the background for the knob
         // painter.circle_filled(center, self.radius, Rgba::BLACK);
 
@@ -132,14 +137,14 @@ fn get_arc_points(center: Pos2, radius: f32, value: f32, max_arc_distance: f32) 
 
 pub struct TextSlider<'a, P: Param> {
     slider_region: SliderRegion<'a, P>,
-    size: Vec2,
+    location: Rect,
 }
 
 impl<'a, P: Param> TextSlider<'a, P> {
-    pub fn for_param(param: &'a P, param_setter: &'a ParamSetter, size: Vec2) -> Self {
+    pub fn for_param(param: &'a P, param_setter: &'a ParamSetter, location: Rect) -> Self {
         TextSlider {
             slider_region: SliderRegion::new(param, param_setter),
-            size,
+            location,
         }
     }
 }
@@ -148,14 +153,14 @@ impl<'a, P: Param> Widget for TextSlider<'a, P> {
     fn ui(self, ui: &mut Ui) -> Response {
         let bg_grey: Rgba = Rgba::from_srgba_premultiplied(0x60, 0x60, 0x60, 0xFF); // #606060
 
-        let response = ui.allocate_response(self.size, Sense::click_and_drag());
+        let response = ui.allocate_rect(self.location, Sense::click_and_drag());
         self.slider_region.handle_response(&ui, &response);
 
-        let painter = ui.painter_at(response.rect);
-        let center = response.rect.center();
+        let painter = ui.painter_at(self.location);
+        let center = self.location.center();
         // Draw the background for the text
-        let stroke = Stroke::default();
-        painter.rect(response.rect, Rounding::same(1.0), bg_grey, stroke);
+        // let stroke = Stroke::default();
+        // painter.rect(response.rect, Rounding::same(1.0), bg_grey, stroke);
 
         // Draw the text
         let text = self.slider_region.get_string();
