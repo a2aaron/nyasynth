@@ -191,7 +191,7 @@ impl Voice {
         sample_rate: SampleRate,
         pitch_bend: Pitchbend,
         vibrato_mod: f32,
-    ) -> (f32, f32) {
+    ) -> (f32, f32, f32) {
         self.samples_since_note_on += 1;
         let context = self.get_note_context(sample_rate);
 
@@ -282,7 +282,7 @@ impl Voice {
             value
         };
 
-        (value, value)
+        (value, value, total_volume)
     }
 
     pub fn note_off(&mut self) {

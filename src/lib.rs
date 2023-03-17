@@ -13,8 +13,9 @@ mod sound_gen;
 mod ui;
 mod ui_knob;
 
-use std::sync::Arc;
+use std::sync::{atomic::Ordering, Arc};
 
+use atomic_float::AtomicF32;
 use chorus::Chorus;
 use common::{Note, Pitch, Pitchbend, SampleRate, Vel};
 use ease::lerp;
@@ -40,6 +41,7 @@ pub struct Nyasynth {
     /// The global noise generator
     noise_generator: NoiseGenerator,
     sample_rate: SampleRate,
+    envelope_amount: Arc<AtomicF32>,
 }
 
 impl Plugin for Nyasynth {
@@ -122,6 +124,7 @@ impl Plugin for Nyasynth {
         };
 
         let mut block_start = 0;
+        let mut max_envelope = 0.0f32;
         while block_start < num_samples {
             // Initially set the block size to 64 (or, if the number of samples in the buffer
             // is smaller than 64, to just that value)
@@ -164,13 +167,14 @@ impl Plugin for Nyasynth {
                 let pitch_bend = self.pitch_bend_smoother.next();
 
                 for voice in &mut self.notes {
-                    let (left, right) = voice.next_sample(
+                    let (left, right, total_volume) = voice.next_sample(
                         &params,
                         &mut self.noise_generator,
                         sample_rate,
                         pitch_bend,
                         vibrato_mod,
                     );
+                    max_envelope = max_envelope.max(total_volume);
 
                     left_out[block_start + i] += left;
                     right_out[block_start + i] += right;
@@ -179,6 +183,8 @@ impl Plugin for Nyasynth {
 
             block_start = block_end;
         }
+
+        self.envelope_amount.store(max_envelope, Ordering::Relaxed);
 
         let chorus_params = &params.chorus;
         // Chorus  and other post processing effects
@@ -224,7 +230,7 @@ impl Plugin for Nyasynth {
     }
 
     fn editor(&self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
-        ui::get_editor(self.params.clone())
+        ui::get_editor(self.params.clone(), self.envelope_amount.clone())
     }
 }
 impl Default for Nyasynth {
@@ -239,6 +245,7 @@ impl Default for Nyasynth {
             noise_generator: NoiseGenerator::new(),
             sample_rate: SampleRate(44100.0),
             pitch_bend_smoother: Smoother::new(SmoothingStyle::Linear(0.1)),
+            envelope_amount: Arc::new(0.0.into()),
         }
     }
 }

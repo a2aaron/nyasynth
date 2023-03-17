@@ -1,5 +1,6 @@
-use std::sync::Arc;
+use std::sync::{atomic::Ordering, Arc};
 
+use atomic_float::AtomicF32;
 use nih_plug::prelude::{Editor, Param, ParamSetter};
 use nih_plug_egui::{
     create_egui_editor,
@@ -145,16 +146,33 @@ impl WidgetLocations {
 }
 
 struct EditorState {
-    cat_image: Option<TextureHandle>,
+    cat_images: Vec<TextureHandle>,
     brushed_metal: Option<TextureHandle>,
     polycat_on: Option<TextureHandle>,
     polycat_state: bool,
     widget_location: WidgetLocations,
+    envelope_amount: Arc<AtomicF32>,
 }
 
 impl EditorState {
+    fn new(polycat_state: bool, envelope_amount: Arc<AtomicF32>) -> EditorState {
+        EditorState {
+            widget_location: WidgetLocations::from_spine_json(
+                serde_json::from_str(include_str!("../assets/spine_json/Spine.json")).unwrap(),
+            ),
+            cat_images: vec![],
+            brushed_metal: None,
+            polycat_on: None,
+            polycat_state,
+            envelope_amount,
+        }
+    }
+
     fn cat_image(&self) -> TextureHandle {
-        self.cat_image.clone().unwrap()
+        let amount = self.envelope_amount.load(Ordering::Relaxed);
+        let i = (amount * (self.cat_images.len() - 1) as f32).floor() as usize;
+        let i = i.clamp(0, self.cat_images.len() - 1);
+        self.cat_images[i].clone()
     }
 
     fn brushed_metal(&self) -> TextureHandle {
@@ -174,36 +192,52 @@ fn load_image_from_memory(image_data: &[u8]) -> Result<ColorImage, image::ImageE
     Ok(ColorImage::from_rgba_unmultiplied(size, pixels.as_slice()))
 }
 
-pub fn get_editor(params: Arc<Parameters>) -> Option<Box<dyn Editor>> {
+pub fn get_editor(
+    params: Arc<Parameters>,
+    envelope_amount: Arc<AtomicF32>,
+) -> Option<Box<dyn Editor>> {
     let egui_state = EguiState::from_size(SCREEN_WIDTH, SCREEN_HEIGHT);
-    let user_state = EditorState {
-        cat_image: None,
-        brushed_metal: None,
-        polycat_on: None,
-        polycat_state: params.polycat.value(),
-        widget_location: WidgetLocations::from_spine_json(
-            serde_json::from_str(include_str!("../assets/spine_json/Spine.json")).unwrap(),
-        ),
-    };
+    let editor_state = EditorState::new(params.polycat.value(), envelope_amount);
 
     create_egui_editor(
         egui_state,
-        user_state,
+        editor_state,
         |cx, editor_state| {
-            let load_image = |name: &str, image: ColorImage| -> Option<TextureHandle> {
-                Some(cx.load_texture(name, image, egui::TextureFilter::Linear))
+            let load_image = |name: &str, image: ColorImage| -> TextureHandle {
+                cx.load_texture(name, image, egui::TextureFilter::Linear)
             };
-            let image = ColorImage::example();
-            editor_state.cat_image = load_image("cat-image", image);
+
+            let cat_images = &mut editor_state.cat_images;
+            let cat_0 = load_image_from_memory(include_bytes!("../assets/cat-imgs/0.png")).unwrap();
+            let cat_1 = load_image_from_memory(include_bytes!("../assets/cat-imgs/1.png")).unwrap();
+            let cat_2 = load_image_from_memory(include_bytes!("../assets/cat-imgs/2.png")).unwrap();
+            let cat_3 = load_image_from_memory(include_bytes!("../assets/cat-imgs/3.png")).unwrap();
+            let cat_4 = load_image_from_memory(include_bytes!("../assets/cat-imgs/4.png")).unwrap();
+            let cat_5 = load_image_from_memory(include_bytes!("../assets/cat-imgs/5.png")).unwrap();
+            let cat_6 = load_image_from_memory(include_bytes!("../assets/cat-imgs/6.png")).unwrap();
+            let cat_7 = load_image_from_memory(include_bytes!("../assets/cat-imgs/7.png")).unwrap();
+            let cat_8 = load_image_from_memory(include_bytes!("../assets/cat-imgs/8.png")).unwrap();
+            let cat_9 = load_image_from_memory(include_bytes!("../assets/cat-imgs/9.png")).unwrap();
+
+            cat_images.push(load_image("cat-image-0", cat_0));
+            cat_images.push(load_image("cat-image-1", cat_1));
+            cat_images.push(load_image("cat-image-2", cat_2));
+            cat_images.push(load_image("cat-image-3", cat_3));
+            cat_images.push(load_image("cat-image-4", cat_4));
+            cat_images.push(load_image("cat-image-5", cat_5));
+            cat_images.push(load_image("cat-image-6", cat_6));
+            cat_images.push(load_image("cat-image-7", cat_7));
+            cat_images.push(load_image("cat-image-8", cat_8));
+            cat_images.push(load_image("cat-image-9", cat_9));
 
             let brushed_metal =
                 load_image_from_memory(include_bytes!("../assets/ui_2x_v2.png")).unwrap();
-            editor_state.brushed_metal = load_image("metal-knob", brushed_metal);
+            editor_state.brushed_metal = Some(load_image("metal-knob", brushed_metal));
 
             let polycat_on =
                 load_image_from_memory(include_bytes!("../assets/spine_json/POLYCAT ON.png"))
                     .unwrap();
-            editor_state.polycat_on = load_image("polycat-on", polycat_on);
+            editor_state.polycat_on = Some(load_image("polycat-on", polycat_on));
         },
         move |cx, setter, editor_state| {
             cx.set_debug_on_hover(true);
