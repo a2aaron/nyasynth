@@ -121,10 +121,9 @@ impl WidgetLocations {
         let bg = get_data(default, "background");
         let original_size = (bg.width, bg.height);
 
-        nih_plug::nih_log!(
-            "rect: {:?}",
-            get_data(default, "Image Emboss").as_rect(original_size)
-        );
+        let cat_image = get_data(default, "Image Emboss")
+            .as_rect(original_size)
+            .shrink(10.0);
 
         WidgetLocations {
             meow_attack: get_data(default, "Meow Attack Knob").center(original_size),
@@ -140,7 +139,7 @@ impl WidgetLocations {
             pitch_bend: get_data(default, "Pitchbend Emboss").as_rect(original_size),
             polycat_button: get_data(default, "Polycat BG").as_rect(original_size),
             polycat_on: get_data(default, "POLYCAT ON").as_rect(original_size),
-            cat_image: get_data(default, "Image Emboss").as_rect(original_size),
+            cat_image,
         }
     }
 }
