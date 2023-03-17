@@ -18,14 +18,14 @@ use crate::{
 const SCREEN_WIDTH: u32 = 450;
 const SCREEN_HEIGHT: u32 = 300;
 
-fn make_arc_knob(ui: &mut Ui, param_setter: &ParamSetter, param: &impl Param, center: Pos2) {
+fn make_arc_knob(ui: &mut Ui, setter: &ParamSetter, param: &impl Param, center: Pos2) {
     // Knobs are 140.0x140.0 px, but need to scaled down by a factor of 4.
     let radius = 140.0 / 2.0 / 4.0;
-    ui.add(ArcKnob::for_param(param, param_setter, radius, center));
+    ui.add(ArcKnob::for_param(param, setter, radius, center));
 }
 
-fn make_text_slider(ui: &mut Ui, param_setter: &ParamSetter, param: &impl Param, location: Rect) {
-    ui.add(TextSlider::for_param(param, param_setter, location));
+fn make_text_slider(ui: &mut Ui, setter: &ParamSetter, param: &impl Param, location: Rect) {
+    ui.add(TextSlider::for_param(param, setter, location));
 }
 
 struct WidgetLocations {
@@ -206,7 +206,7 @@ pub fn get_editor(params: Arc<Parameters>) -> Option<Box<dyn Editor>> {
                     .unwrap();
             editor_state.polycat_on = load_image("polycat-on", polycat_on);
         },
-        move |cx, param_setter, editor_state| {
+        move |cx, setter, editor_state| {
             cx.set_debug_on_hover(true);
             egui::CentralPanel::default()
                 .frame(
@@ -214,121 +214,42 @@ pub fn get_editor(params: Arc<Parameters>) -> Option<Box<dyn Editor>> {
                         .fill(Rgba::from_srgba_premultiplied(0x89, 0xA9, 0xBD, 0xFF).into()),
                 )
                 .show(cx, |ui| {
+                    let locs = &editor_state.widget_location;
+
+                    // UI Background
                     let background = image_shape(editor_state.brushed_metal(), ui.max_rect());
                     ui.painter().add(background);
 
-                    ui.horizontal(|ui| {
-                        ui.vertical(|ui| {
-                            let image = image_shape(
-                                editor_state.cat_image(),
-                                editor_state.widget_location.cat_image,
-                            );
-                            ui.painter().add(image);
-                        });
-                        ui.vertical(|ui| {
-                            ui.vertical(|ui| {
-                                {
-                                    let locations = &editor_state.widget_location;
+                    // Cat Image
+                    let image = image_shape(editor_state.cat_image(), locs.cat_image);
+                    ui.painter().add(image);
 
-                                    ui.horizontal(|ui| {
-                                        make_arc_knob(
-                                            ui,
-                                            &param_setter,
-                                            &params.meow_attack,
-                                            locations.meow_attack,
-                                        );
-                                        make_arc_knob(
-                                            ui,
-                                            &param_setter,
-                                            &params.meow_decay,
-                                            locations.meow_decay,
-                                        );
-                                        make_arc_knob(
-                                            ui,
-                                            &param_setter,
-                                            &params.meow_sustain,
-                                            locations.meow_sustain,
-                                        );
-                                        make_arc_knob(
-                                            ui,
-                                            &param_setter,
-                                            &params.meow_release,
-                                            locations.meow_release,
-                                        );
-                                    });
-                                    ui.horizontal(|ui| {
-                                        make_arc_knob(
-                                            ui,
-                                            &param_setter,
-                                            &params.vibrato_amount,
-                                            locations.vibrato_amount,
-                                        );
-                                        make_arc_knob(
-                                            ui,
-                                            &param_setter,
-                                            &params.vibrato_attack,
-                                            locations.vibrato_attack,
-                                        );
-                                        make_text_slider(
-                                            ui,
-                                            param_setter,
-                                            &params.vibrato_rate,
-                                            locations.vibrato_speed,
-                                        );
-                                    });
-                                    ui.horizontal(|ui| {
-                                        make_arc_knob(
-                                            ui,
-                                            &param_setter,
-                                            &params.portamento_time,
-                                            locations.portamento_time,
-                                        );
-                                        make_arc_knob(
-                                            ui,
-                                            &param_setter,
-                                            &params.noise_mix,
-                                            locations.noise_mix,
-                                        );
-                                        make_arc_knob(
-                                            ui,
-                                            &param_setter,
-                                            &params.chorus_mix,
-                                            locations.chorus_mix,
-                                        );
-                                        make_text_slider(
-                                            ui,
-                                            param_setter,
-                                            &params.pitch_bend,
-                                            locations.pitch_bend,
-                                        );
-                                    });
-                                }
-                                ui.vertical_centered(|ui| {
-                                    let button = ui.allocate_rect(
-                                        editor_state.widget_location.polycat_button,
-                                        Sense::click(),
-                                    );
-                                    if button.clicked() {
-                                        editor_state.polycat_state = !editor_state.polycat_state;
-                                        param_setter.begin_set_parameter(&params.polycat);
-                                        param_setter.set_parameter(
-                                            &params.polycat,
-                                            editor_state.polycat_state,
-                                        );
-                                        param_setter.end_set_parameter(&params.polycat);
-                                    }
-                                    if editor_state.polycat_state {
-                                        let shape = image_shape(
-                                            editor_state.polycat_on(),
-                                            editor_state.widget_location.polycat_on,
-                                        );
-                                        ui.painter().add(shape);
-                                    };
-                                    button
-                                });
-                            });
-                        });
-                    });
+                    // Knobs
+                    make_arc_knob(ui, &setter, &params.meow_attack, locs.meow_attack);
+                    make_arc_knob(ui, &setter, &params.meow_decay, locs.meow_decay);
+                    make_arc_knob(ui, &setter, &params.meow_sustain, locs.meow_sustain);
+                    make_arc_knob(ui, &setter, &params.meow_release, locs.meow_release);
+                    make_arc_knob(ui, &setter, &params.vibrato_amount, locs.vibrato_amount);
+                    make_arc_knob(ui, &setter, &params.vibrato_attack, locs.vibrato_attack);
+                    make_text_slider(ui, setter, &params.vibrato_rate, locs.vibrato_speed);
+                    make_arc_knob(ui, &setter, &params.portamento_time, locs.portamento_time);
+                    make_arc_knob(ui, &setter, &params.noise_mix, locs.noise_mix);
+                    make_arc_knob(ui, &setter, &params.chorus_mix, locs.chorus_mix);
+                    make_text_slider(ui, setter, &params.pitch_bend, locs.pitch_bend);
+
+                    // Polycat Button
+                    let button = ui.allocate_rect(locs.polycat_button, Sense::click());
+                    if button.clicked() {
+                        editor_state.polycat_state = !editor_state.polycat_state;
+                        setter.begin_set_parameter(&params.polycat);
+                        setter.set_parameter(&params.polycat, editor_state.polycat_state);
+                        setter.end_set_parameter(&params.polycat);
+                    }
+                    if editor_state.polycat_state {
+                        let shape = image_shape(editor_state.polycat_on(), locs.polycat_on);
+                        ui.painter().add(shape);
+                    };
+                    button
                 });
         },
     )
