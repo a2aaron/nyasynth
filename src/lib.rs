@@ -253,7 +253,8 @@ impl Default for Nyasynth {
 impl Vst3Plugin for Nyasynth {
     const VST3_CLASS_ID: [u8; 16] = *b"nyasynth.a2aaron";
 
-    const VST3_SUBCATEGORIES: &'static [Vst3SubCategory] = &[Vst3SubCategory::Synth];
+    const VST3_SUBCATEGORIES: &'static [Vst3SubCategory] =
+        &[Vst3SubCategory::Synth, Vst3SubCategory::Instrument];
 }
 
 impl Nyasynth {
