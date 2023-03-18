@@ -648,17 +648,34 @@ impl BandlimitedOscillator {
             2.0 * angle - 1.0
         }
         let angle_delta = pitch.get() / sample_rate.get();
+        let x = sawtooth(self.angle);
+        let x = x - polyblep(self.angle, angle_delta);
 
-        let x0 = sawtooth(self.angle);
-        let x1 = sawtooth((self.angle + angle_delta * 0.5).fract());
+        // let x0 = sawtooth(self.angle);
+        // let x1 = sawtooth((self.angle + angle_delta * 0.5).fract());
+
         self.angle = (self.angle + angle_delta).fract();
-
-        self.filter.next(x0, x1)
+        // self.filter.next(x0, x1)
+        x
     }
 }
 
-impl Default for BandlimitedOscillator {
-    fn default() -> Self {
-        Self::new()
+// Polyblep code adapted from https://www.martin-finke.de/articles/audio-plugins-018-polyblep-oscillator/
+fn polyblep(mut angle: f32, angle_delta: f32) -> f32 {
+    // If the angle is just after a discontinuity
+    if angle < angle_delta {
+        angle /= angle_delta;
+        // -x^2 + 2x - 1.0
+        angle + angle - angle * angle - 1.0
+    }
+    // Else if the angle just before the discontiunity
+    else if angle > 1.0 - angle_delta {
+        angle = (angle - 1.0) / angle_delta;
+        // x^2 + 2x + 1
+        angle * angle + angle + angle + 1.0
+    }
+    // 0 otherwise
+    else {
+        0.0
     }
 }
