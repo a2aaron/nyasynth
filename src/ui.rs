@@ -256,7 +256,6 @@ pub fn get_editor(
             cx.set_fonts(fonts);
         },
         move |cx, setter, editor_state| {
-            cx.set_debug_on_hover(true);
             egui::CentralPanel::default()
                 .frame(
                     Frame::none()
