@@ -102,7 +102,7 @@ fn get_arc_points(center: Pos2, radius: f32, value: f32, max_arc_distance: f32) 
     let end_turns = start_turns + arc_length;
 
     let points = (arc_length.abs() / max_arc_distance).ceil() as usize;
-
+    let points = points.max(1);
     (0..=points)
         .map(|i| {
             let t = i as f32 / (points - 1) as f32;
