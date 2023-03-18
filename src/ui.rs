@@ -5,8 +5,8 @@ use nih_plug::prelude::{Editor, Param, ParamSetter};
 use nih_plug_egui::{
     create_egui_editor,
     egui::{
-        self, pos2, vec2, Color32, ColorImage, Frame, Pos2, Rect, Rgba, Sense, Shape,
-        TextureHandle, Ui, Vec2,
+        self, pos2, vec2, Color32, ColorImage, FontDefinitions, Frame, Pos2, Rect, Rgba, Sense,
+        Shape, TextureHandle, Ui, Vec2,
     },
     EguiState,
 };
@@ -238,6 +238,22 @@ pub fn get_editor(
                 load_image_from_memory(include_bytes!("../assets/spine_json/POLYCAT ON.png"))
                     .unwrap();
             editor_state.polycat_on = Some(load_image("polycat-on", polycat_on));
+
+            let determination =
+                egui::FontData::from_static(include_bytes!("../assets/DTM-mono.otf"));
+
+            let mut fonts = FontDefinitions::default();
+            fonts
+                .font_data
+                .insert("Determination".to_string(), determination);
+
+            // Put my font as last fallback for monospace:
+            fonts
+                .families
+                .entry(egui::FontFamily::Monospace)
+                .or_default()
+                .insert(0, "Determination".to_owned());
+            cx.set_fonts(fonts);
         },
         move |cx, setter, editor_state| {
             cx.set_debug_on_hover(true);

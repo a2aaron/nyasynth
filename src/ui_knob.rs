@@ -140,7 +140,7 @@ impl<'a, P: Param> Widget for TextSlider<'a, P> {
         let text = self.slider_region.get_string();
         let anchor = Align2::CENTER_CENTER;
         let color = Color32::from(Rgba::WHITE);
-        let font = FontId::default();
+        let font = FontId::monospace(16.0);
         painter.text(center, anchor, text, font, color);
         response
     }
