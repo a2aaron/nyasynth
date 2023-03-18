@@ -1,6 +1,6 @@
 # Nyasynth - The World's Second Meowizer
 
-Do you remember [Meowsynth](https://www.youtube.com/watch?v=_VYtQ9jP73s)? So do I. Unforutately, it
+Do you remember [Meowsynth](https://www.youtube.com/watch?v=_VYtQ9jP73s)? So do I. Unfortunately, it
 seems that Meowsynth is only 32-bit and hence isn't compatible with many 64-bit DAWs (in particular,
 it's not compatible with Ableton, which doesn't support 32-bit VSTs any more). Additionally, there
 isn't a Mac or Linux version.
