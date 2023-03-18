@@ -579,18 +579,24 @@ struct SincFilter<const N: usize> {
 
 impl<const N: usize> SincFilter<N> {
     fn new() -> Self {
-        fn sinc(x: f32) -> f32 {
+        fn sinc(x: f32, cutoff_ratio: f32) -> f32 {
             if x == 0.0 {
-                0.5
+                cutoff_ratio * 2.0
             } else {
-                (PI * x / 2.0).sin() / (PI * x)
+                (2.0 * PI * cutoff_ratio * x).sin() / (PI * x)
             }
         }
+        fn blackman(x: f32, window_size: usize) -> f32 {
+            let m = window_size as f32;
+            0.42 - 0.5 * (2.0 * PI * x / m).cos() + 0.08 * (4.0 * PI * x / m).cos()
+        }
+
+        let cutoff_ratio = 0.25;
         let mut sinc_coefficients = [0.0; N];
 
         for i in 0..N {
             let x = (i as i32 - (N as i32) / 2) as f32;
-            sinc_coefficients[i] = sinc(x);
+            sinc_coefficients[i] = sinc(x, cutoff_ratio) * blackman(i as f32, N);
         }
 
         SincFilter {
@@ -608,7 +614,12 @@ impl<const N: usize> SincFilter<N> {
             let buf_i = (i + self.buffer_index) % N;
             sum = self.buffer[buf_i].mul_add(sinc, sum);
         }
-        sum
+
+        if !sum.is_finite() {
+            0.0
+        } else {
+            sum
+        }
     }
 
     fn insert_buffer(&mut self, x0: f32, x1: f32) {
@@ -620,7 +631,7 @@ impl<const N: usize> SincFilter<N> {
 
 #[derive(Debug)]
 struct BandlimitedOscillator {
-    filter: SincFilter<129>,
+    filter: SincFilter<15>,
     angle: f32,
 }
 
@@ -642,12 +653,7 @@ impl BandlimitedOscillator {
         let x1 = sawtooth((self.angle + angle_delta * 0.5).fract());
         self.angle = (self.angle + angle_delta).fract();
 
-        let value = self.filter.next(x0, x1);
-        if !value.is_finite() {
-            0.0
-        } else {
-            value
-        }
+        self.filter.next(x0, x1)
     }
 }
 
