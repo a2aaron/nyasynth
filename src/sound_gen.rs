@@ -1,5 +1,3 @@
-use std::f32::consts::PI;
-
 use crate::{
     common::{Hertz, Note, Pitch, Pitchbend, SampleRate, SampleTime, Seconds, Vel},
     ease::lerp,
@@ -571,76 +569,13 @@ impl NoteShape {
 }
 
 #[derive(Debug)]
-struct SincFilter<const N: usize> {
-    buffer: [f32; N],
-    buffer_index: usize,
-    sinc_coefficients: [f32; N],
-}
-
-impl<const N: usize> SincFilter<N> {
-    fn new() -> Self {
-        fn sinc(x: f32, cutoff_ratio: f32) -> f32 {
-            if x == 0.0 {
-                cutoff_ratio * 2.0
-            } else {
-                (2.0 * PI * cutoff_ratio * x).sin() / (PI * x)
-            }
-        }
-        fn blackman(x: f32, window_size: usize) -> f32 {
-            let m = window_size as f32;
-            0.42 - 0.5 * (2.0 * PI * x / m).cos() + 0.08 * (4.0 * PI * x / m).cos()
-        }
-
-        let cutoff_ratio = 0.25;
-        let mut sinc_coefficients = [0.0; N];
-
-        for i in 0..N {
-            let x = (i as i32 - (N as i32) / 2) as f32;
-            sinc_coefficients[i] = sinc(x, cutoff_ratio) * blackman(i as f32, N);
-        }
-
-        SincFilter {
-            buffer: [0.0; N],
-            buffer_index: 0,
-            sinc_coefficients,
-        }
-    }
-
-    fn next(&mut self, x0: f32, x1: f32) -> f32 {
-        self.insert_buffer(x0, x1);
-
-        let mut sum = 0.0;
-        for (i, sinc) in (0..N).zip(self.sinc_coefficients) {
-            let buf_i = (i + self.buffer_index) % N;
-            sum = self.buffer[buf_i].mul_add(sinc, sum);
-        }
-
-        if !sum.is_finite() {
-            0.0
-        } else {
-            sum
-        }
-    }
-
-    fn insert_buffer(&mut self, x0: f32, x1: f32) {
-        self.buffer[self.buffer_index] = x0;
-        self.buffer[(self.buffer_index + 1) % N] = x1;
-        self.buffer_index = (self.buffer_index + 2) % N;
-    }
-}
-
-#[derive(Debug)]
 struct BandlimitedOscillator {
-    filter: SincFilter<15>,
     angle: f32,
 }
 
 impl BandlimitedOscillator {
     fn new() -> BandlimitedOscillator {
-        BandlimitedOscillator {
-            filter: SincFilter::new(),
-            angle: 0.0,
-        }
+        BandlimitedOscillator { angle: 0.0 }
     }
 
     fn next_sample(&mut self, sample_rate: SampleRate, pitch: Hertz) -> f32 {
@@ -651,16 +586,13 @@ impl BandlimitedOscillator {
         let x = sawtooth(self.angle);
         let x = x - polyblep(self.angle, angle_delta);
 
-        // let x0 = sawtooth(self.angle);
-        // let x1 = sawtooth((self.angle + angle_delta * 0.5).fract());
-
         self.angle = (self.angle + angle_delta).fract();
-        // self.filter.next(x0, x1)
         x
     }
 }
 
 // Polyblep code adapted from https://www.martin-finke.de/articles/audio-plugins-018-polyblep-oscillator/
+// See https://www.desmos.com/calculator/wfxgajtbd0 for visuals.
 fn polyblep(mut angle: f32, angle_delta: f32) -> f32 {
     // If the angle is just after a discontinuity
     if angle < angle_delta {
