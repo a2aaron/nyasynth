@@ -1,3 +1,5 @@
+use std::f32::consts::PI;
+
 use crate::{
     common::{Hertz, Note, Pitch, Pitchbend, SampleRate, SampleTime, Seconds, Vel},
     ease::lerp,
@@ -125,7 +127,7 @@ pub struct Voice {
     // The crossfader envelope, used when crossfading between notes in monocat mode.
     crossfader: Option<Crossfader>,
     // The signal generating oscillator
-    osc: Oscillator,
+    osc: BandlimitedOscillator,
     // The ADSR volume envelope
     vol_env: Envelope<f32>,
     // The vibrato attack envelope
@@ -155,7 +157,7 @@ impl Voice {
             note_state: NoteState::Held,
             filter_sweep: FilterSweeper::new(params, vel),
             crossfader: None,
-            osc: Oscillator::new(),
+            osc: BandlimitedOscillator::new(),
             vol_env: Envelope::<f32>::new(),
             vibrato_env: Envelope::<f32>::new(),
             filter_env: Envelope::<f32>::new(),
@@ -225,9 +227,7 @@ impl Voice {
         let pitch = (base_note + pitch_mod).into_hertz();
 
         // Get next sample
-        let value = self
-            .osc
-            .next_sample(sample_rate, NoteShape::Sawtooth, pitch);
+        let value = self.osc.next_sample(sample_rate, pitch);
 
         // Apply noise, if the noise is turned on.
         let value = if params.noise_mix > 0.01 {
@@ -567,5 +567,92 @@ impl NoteShape {
                 }
             }
         }
+    }
+}
+
+#[derive(Debug)]
+struct SincFilter<const N: usize> {
+    buffer: [f32; N],
+    buffer_index: usize,
+    sinc_coefficients: [f32; N],
+}
+
+impl<const N: usize> SincFilter<N> {
+    fn new() -> Self {
+        fn sinc(x: f32) -> f32 {
+            if x == 0.0 {
+                0.5
+            } else {
+                (PI * x / 2.0).sin() / (PI * x)
+            }
+        }
+        let mut sinc_coefficients = [0.0; N];
+
+        for i in 0..N {
+            let x = (i as i32 - (N as i32) / 2) as f32;
+            sinc_coefficients[i] = sinc(x);
+        }
+
+        SincFilter {
+            buffer: [0.0; N],
+            buffer_index: 0,
+            sinc_coefficients,
+        }
+    }
+
+    fn next(&mut self, x0: f32, x1: f32) -> f32 {
+        self.insert_buffer(x0, x1);
+
+        let mut sum = 0.0;
+        for (i, sinc) in (0..N).zip(self.sinc_coefficients) {
+            let buf_i = (i + self.buffer_index) % N;
+            sum = self.buffer[buf_i].mul_add(sinc, sum);
+        }
+        sum
+    }
+
+    fn insert_buffer(&mut self, x0: f32, x1: f32) {
+        self.buffer[self.buffer_index] = x0;
+        self.buffer[(self.buffer_index + 1) % N] = x1;
+        self.buffer_index = (self.buffer_index + 2) % N;
+    }
+}
+
+#[derive(Debug)]
+struct BandlimitedOscillator {
+    filter: SincFilter<129>,
+    angle: f32,
+}
+
+impl BandlimitedOscillator {
+    fn new() -> BandlimitedOscillator {
+        BandlimitedOscillator {
+            filter: SincFilter::new(),
+            angle: 0.0,
+        }
+    }
+
+    fn next_sample(&mut self, sample_rate: SampleRate, pitch: Hertz) -> f32 {
+        fn sawtooth(angle: f32) -> f32 {
+            2.0 * angle - 1.0
+        }
+        let angle_delta = pitch.get() / sample_rate.get();
+
+        let x0 = sawtooth(self.angle);
+        let x1 = sawtooth((self.angle + angle_delta * 0.5).fract());
+        self.angle = (self.angle + angle_delta).fract();
+
+        let value = self.filter.next(x0, x1);
+        if !value.is_finite() {
+            0.0
+        } else {
+            value
+        }
+    }
+}
+
+impl Default for BandlimitedOscillator {
+    fn default() -> Self {
+        Self::new()
     }
 }
