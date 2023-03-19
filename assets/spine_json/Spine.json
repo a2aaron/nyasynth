@@ -2,6 +2,7 @@
 "bones":[{"name":"root"}],
 "slots":[
 	{"name":"Image Emboss","bone":"root","attachment":"Image Emboss"},
+	{"name":"Logo Bg","bone":"root","attachment":"Logo Bg"},
 	{"name":"Polycat BG","bone":"root","attachment":"Polycat BG"},
 	{"name":"POLYCAT OFF","bone":"root","attachment":"POLYCAT OFF"},
 	{"name":"POLYCAT ON","bone":"root","attachment":"POLYCAT ON"},
@@ -21,11 +22,12 @@
 "skins":{
 	"default":{
 		"Image Emboss":{"Image Emboss":{"x":445,"y":827.5,"width":760,"height":651}},
+		"Logo Bg":{"Logo Bg":{"x":454.5,"y":238.5,"width":777,"height":377}},
 		"Polycat BG":{"Polycat BG":{"x":1315,"y":145,"width":838,"height":158}},
 		"POLYCAT OFF":{"POLYCAT OFF":{"x":1315,"y":147,"width":384,"height":66}},
 		"POLYCAT ON":{"POLYCAT ON":{"x":1315,"y":147,"width":440,"height":120}},
 		"Pitchbend Emboss":{"Pitchbend Emboss":{"x":1605,"y":350,"width":118,"height":118}},
-		"Chorus Knob":{"Chorus Knob":{"x":1413,"y":350,"width":140,"height":140}},
+		"Chorus Knob":{"Chorus Knob":{"x":1414,"y":350,"width":140,"height":140}},
 		"Noise Knob":{"Noise Knob":{"x":1221,"y":350,"width":140,"height":140}},
 		"Portamento Knob":{"Portamento Knob":{"x":1029,"y":350,"width":140,"height":140}},
 		"Vibrato Speed Emboss":{"Vibrato Speed Emboss":{"x":1523,"y":645,"width":256,"height":106}},

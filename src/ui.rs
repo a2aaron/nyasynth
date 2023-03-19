@@ -5,8 +5,8 @@ use nih_plug::prelude::{Editor, Param, ParamSetter};
 use nih_plug_egui::{
     create_egui_editor,
     egui::{
-        self, pos2, vec2, Color32, ColorImage, FontDefinitions, Frame, Pos2, Rect, Rgba, Sense,
-        Shape, TextureHandle, Ui, Vec2,
+        self, pos2, vec2, Align2, Color32, ColorImage, FontDefinitions, FontId, Frame, Pos2, Rect,
+        Rgba, Rounding, Sense, Shape, TextureHandle, Ui, Vec2,
     },
     EguiState,
 };
@@ -44,6 +44,7 @@ struct WidgetLocations {
     polycat_button: Rect,
     polycat_on: Rect,
     cat_image: Rect,
+    nyasynth_logo: Rect,
 }
 impl WidgetLocations {
     fn from_spine_json(value: serde_json::Value) -> WidgetLocations {
@@ -140,6 +141,7 @@ impl WidgetLocations {
             pitch_bend: get_data(default, "Pitchbend Emboss").as_rect(original_size),
             polycat_button: get_data(default, "Polycat BG").as_rect(original_size),
             polycat_on: get_data(default, "POLYCAT ON").as_rect(original_size),
+            nyasynth_logo: get_data(default, "Logo Bg").as_rect(original_size),
             cat_image,
         }
     }
@@ -150,6 +152,7 @@ struct EditorState {
     brushed_metal: Option<TextureHandle>,
     polycat_on: Option<TextureHandle>,
     polycat_state: bool,
+    logo_open: bool,
     widget_location: WidgetLocations,
     envelope_amount: Arc<AtomicF32>,
 }
@@ -164,6 +167,7 @@ impl EditorState {
             brushed_metal: None,
             polycat_on: None,
             polycat_state,
+            logo_open: false,
             envelope_amount,
         }
     }
@@ -297,11 +301,45 @@ pub fn get_editor(
                         let shape = image_shape(editor_state.polycat_on(), locs.polycat_on);
                         ui.painter().add(shape);
                     };
-                    button
+
+                    // Nyasynth Logo
+
+                    // Nyasynth Text
+                    let nyasynth_logo = ui.allocate_rect(locs.nyasynth_logo, Sense::click());
+                    if nyasynth_logo.clicked() {
+                        editor_state.logo_open = !editor_state.logo_open;
+                    }
+                    if editor_state.logo_open {
+                        let painter = ui.painter();
+                        painter.rect_filled(
+                            locs.cat_image,
+                            Rounding::same(1.0),
+                            Color32::from_black_alpha(200),
+                        );
+                        let font_id = FontId::monospace(11.0);
+                        let color = Color32::WHITE;
+                        let galley = painter.layout(
+                            CREDITS_TEXT.to_string(),
+                            font_id,
+                            color,
+                            locs.cat_image.width(),
+                        );
+                        painter.galley(locs.cat_image.left_top() + vec2(2.0, 2.0), galley);
+                    }
                 });
         },
     )
 }
+
+const CREDITS_TEXT: &str = r#"Determination font by Haley Wakamatsu
+behance.net/JapanYoshi
+
+Cat gif of Baksik originally from Meowsynth
+web.archive.org/web/20120930004514/myspace.com/baksik
+
+Nyasynth programmed by a2aaron
+github.com/a2aaron/nyasynth
+"#;
 
 fn image_shape(texture_handle: TextureHandle, rect: Rect) -> Shape {
     Shape::image(
