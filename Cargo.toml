@@ -20,7 +20,7 @@ ordered-float = "3.4.0"
 getrandom = "0.2.8"
 atomic_float = "0.1.0"
 once_cell = "1.17.1"
-image = "0.24.5"
+image = { version = "0.24.5", default-features = false, features = ["png"] }
 
 # perf.rs dependencies
 midly = "0.5.3"
@@ -31,7 +31,7 @@ serde = "1.0.156"
 
 [profile.release]
 incremental = true
-debug = true
+lto = true
 
 [lib]
 crate-type = ["cdylib", "lib"]
