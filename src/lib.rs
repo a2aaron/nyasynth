@@ -6,7 +6,6 @@
 mod chorus;
 pub mod common;
 mod keys;
-mod neighbor_pairs;
 mod params;
 mod sound_gen;
 mod ui;
