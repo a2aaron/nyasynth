@@ -161,7 +161,7 @@ impl EditorState {
     fn new(polycat_state: bool, envelope_amount: Arc<AtomicF32>) -> EditorState {
         EditorState {
             widget_location: WidgetLocations::from_spine_json(
-                serde_json::from_str(include_str!("../assets/spine_json/Spine.json")).unwrap(),
+                serde_json::from_str(include_str!("../assets/Spine.json")).unwrap(),
             ),
             cat_images: vec![],
             brushed_metal: None,
@@ -239,8 +239,7 @@ pub fn get_editor(
             editor_state.brushed_metal = Some(load_image("metal-knob", brushed_metal));
 
             let polycat_on =
-                load_image_from_memory(include_bytes!("../assets/spine_json/POLYCAT ON.png"))
-                    .unwrap();
+                load_image_from_memory(include_bytes!("../assets/POLYCAT ON.png")).unwrap();
             editor_state.polycat_on = Some(load_image("polycat-on", polycat_on));
 
             let determination =
