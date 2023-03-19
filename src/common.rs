@@ -1,3 +1,5 @@
+use std::ops::{Add, Mul, Sub};
+
 use atomic_float::AtomicF32;
 use biquad::ToHertz;
 use derive_more::{Add, From, Into, Sub};
@@ -8,11 +10,7 @@ use nih_plug::{
 };
 use ordered_float::OrderedFloat;
 
-use crate::{
-    ease::{ease_in_expo, lerp, Easing},
-    neighbor_pairs::NeighborPairsIter,
-    sound_gen::EnvelopeType,
-};
+use crate::{neighbor_pairs::NeighborPairsIter, sound_gen::EnvelopeType};
 
 pub type SampleTime = usize;
 
@@ -58,6 +56,14 @@ pub struct Vel {
 
 impl Vel {
     pub fn new(raw: f32) -> Vel {
+        fn ease_in_expo(x: f32) -> f32 {
+            if x <= 0.0 {
+                0.0
+            } else {
+                (2.0f32.powf(10.0 * x) - 1.0) / (2.0f32.powf(10.0) - 1.0)
+            }
+        }
+
         // Easing sort of experimentally determined and is meant for use with the filter cutoff value.
         // See the following:
         // https://www.desmos.com/calculator/grjkm7iknd
@@ -86,12 +92,6 @@ impl Seconds {
     /// Get the number of seconds as an [f32].
     pub const fn get(&self) -> f32 {
         self.0 .0
-    }
-
-    pub const fn ease_exp(start: f32, end: f32) -> Easing<Seconds> {
-        let start = Seconds::new(start);
-        let end = Seconds::new(end);
-        Easing::Exponential { start, end }
     }
 
     /// Interprets the seconds value as a period and converts it to Hz.
@@ -374,18 +374,6 @@ impl Decibel {
         Decibel::from_db(db)
     }
 
-    // Linearly interpolate in Decibel space, but values of t below 0.125 will
-    // lerp from `start` to `Decibel::zero()`. This function is meant for use
-    // with user-facing parameter knobs.
-    pub const fn ease_db(start: f32, end: f32) -> Easing<Decibel> {
-        Easing::SplitLinear {
-            start: Decibel::neg_inf_db(),
-            mid: Decibel::from_db(start),
-            end: Decibel::from_db(end),
-            split_at: 0.125,
-        }
-    }
-
     /// Get the peak amplitude a signal played at the given Decibel amount would produce.
     pub fn get_amp(&self) -> f32 {
         if self.get_db() <= Decibel::NEG_INF_DB_THRESHOLD {
@@ -480,6 +468,15 @@ impl From<FilterType> for biquad::Type<f32> {
             FilterType::Notch => biquad::Type::Notch,
         }
     }
+}
+
+// TODO: you could reduce the Copy bound to just Clone although it'd be more annoying to work with.
+pub trait Lerpable =
+    Add<Self, Output = Self> + Sub<Self, Output = Self> + Mul<f32, Output = Self> + Copy;
+
+/// Lerp between two values. This function is clamped.
+pub fn lerp<T: Lerpable>(start: T, end: T, t: f32) -> T {
+    (end - start) * t.clamp(0.0, 1.0) + start
 }
 
 pub const fn ease_exp(min: f32, max: f32) -> FloatRange {

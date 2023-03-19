@@ -5,7 +5,6 @@
 
 mod chorus;
 pub mod common;
-pub mod ease;
 mod keys;
 mod neighbor_pairs;
 mod params;
@@ -17,8 +16,7 @@ use std::sync::{atomic::Ordering, Arc};
 
 use atomic_float::AtomicF32;
 use chorus::Chorus;
-use common::{Note, Pitch, Pitchbend, SampleRate, Vel};
-use ease::lerp;
+use common::{lerp, Note, Pitch, Pitchbend, SampleRate, Vel};
 use keys::KeyTracker;
 use nih_plug::{nih_export_vst3, prelude::*};
 use params::{MeowParameters, Parameters};

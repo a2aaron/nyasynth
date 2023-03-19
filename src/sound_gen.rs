@@ -1,6 +1,5 @@
 use crate::{
-    common::{Hertz, Note, Pitch, Pitchbend, SampleRate, SampleTime, Seconds, Vel},
-    ease::lerp,
+    common::{lerp, Hertz, Note, Pitch, Pitchbend, SampleRate, SampleTime, Seconds, Vel},
     params::{EnvelopeParams, MeowParameters},
 };
 

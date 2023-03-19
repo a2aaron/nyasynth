@@ -7,7 +7,7 @@ use nih_plug_egui::egui::{
 };
 use once_cell::sync::Lazy;
 
-use crate::ease::lerp;
+use crate::common::lerp;
 
 static DRAG_AMOUNT_MEMORY_ID: Lazy<Id> = Lazy::new(|| Id::new("drag_amount_memory_id"));
 
