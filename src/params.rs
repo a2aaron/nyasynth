@@ -4,7 +4,7 @@ use nih_plug::prelude::{
     BoolParam, Enum, EnumParam, FloatParam, FloatRange, IntParam, IntRange, Param, Params,
 };
 
-use crate::common::{self, Decibel, Seconds};
+use crate::common::{Decibel, Seconds};
 use crate::common::{FilterType, Hertz};
 use crate::sound_gen::NoteShape;
 
@@ -278,13 +278,17 @@ impl Parameters {
             FloatParam::new(name, default.get(), range).with_value_to_string(Arc::new(formatter))
         }
 
+        const fn ease_linear(min: f32, max: f32) -> FloatRange {
+            FloatRange::Linear { min, max }
+        }
+
         let filter_envelope_mod = Hertz::ease_exp(0.0, 22100.0);
         let filter_cutoff_freq = Hertz::ease_exp(20.0, 22100.0);
-        let filter_q = common::ease_linear(0.01, 10.0);
+        let filter_q = ease_linear(0.01, 10.0);
 
         let chorus_rate = Hertz::ease_exp(0.1, 10.0);
-        let chorus_depth = common::ease_linear(0.0, MAX_CHORUS_DEPTH);
-        let chorus_distance = common::ease_linear(0.0, MAX_CHORUS_DISTANCE);
+        let chorus_depth = ease_linear(0.0, MAX_CHORUS_DEPTH);
+        let chorus_distance = ease_linear(0.0, MAX_CHORUS_DISTANCE);
 
         Parameters {
             meow_attack: time("Meow Attack", DEFAULT_MEOW_ATTACK, 0.001, 10.0),

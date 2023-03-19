@@ -478,15 +478,3 @@ pub trait Lerpable =
 pub fn lerp<T: Lerpable>(start: T, end: T, t: f32) -> T {
     (end - start) * t.clamp(0.0, 1.0) + start
 }
-
-pub const fn ease_exp(min: f32, max: f32) -> FloatRange {
-    FloatRange::Skewed {
-        min,
-        max,
-        factor: 6.0,
-    }
-}
-
-pub const fn ease_linear(min: f32, max: f32) -> FloatRange {
-    FloatRange::Linear { min, max }
-}
