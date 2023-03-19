@@ -5,8 +5,8 @@ use nih_plug::prelude::{Editor, Param, ParamSetter};
 use nih_plug_egui::{
     create_egui_editor,
     egui::{
-        self, pos2, vec2, Align2, Color32, ColorImage, FontDefinitions, FontId, Frame, Pos2, Rect,
-        Rgba, Rounding, Sense, Shape, TextureHandle, Ui, Vec2,
+        self, pos2, vec2, Color32, ColorImage, FontDefinitions, FontId, Frame, Pos2, Rect, Rgba,
+        Rounding, Sense, Shape, TextureHandle, Ui, Vec2,
     },
     EguiState,
 };
