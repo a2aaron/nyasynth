@@ -1,10 +1,10 @@
+use biquad::{Biquad, DirectForm1, ToHertz, Q_BUTTERWORTH_F32};
+use nih_plug::prelude::Enum;
+
 use crate::{
     common::{lerp, Hertz, Note, Pitch, Pitchbend, SampleRate, SampleTime, Seconds, Vel},
     params::{EnvelopeParams, MeowParameters},
 };
-
-use biquad::{Biquad, DirectForm1, ToHertz, Q_BUTTERWORTH_F32};
-use nih_plug::prelude::Enum;
 
 const TAU: f32 = std::f32::consts::TAU;
 

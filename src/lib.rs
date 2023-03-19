@@ -15,12 +15,12 @@ mod ui_knob;
 use std::sync::{atomic::Ordering, Arc};
 
 use atomic_float::AtomicF32;
+use nih_plug::{nih_export_vst3, prelude::*};
+
 use chorus::Chorus;
 use common::{lerp, Note, Pitch, Pitchbend, SampleRate, Vel};
 use keys::KeyTracker;
-use nih_plug::{nih_export_vst3, prelude::*};
 use params::{MeowParameters, Parameters};
-
 use sound_gen::{NoiseGenerator, Oscillator, Voice, RETRIGGER_TIME};
 
 /// The main plugin struct.

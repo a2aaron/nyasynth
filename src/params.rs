@@ -4,8 +4,7 @@ use nih_plug::prelude::{
     BoolParam, Enum, EnumParam, FloatParam, FloatRange, IntParam, IntRange, Param, Params,
 };
 
-use crate::common::{Decibel, Seconds};
-use crate::common::{FilterType, Hertz};
+use crate::common::{Decibel, FilterType, Hertz, Seconds};
 use crate::sound_gen::NoteShape;
 
 // Default values for master volume
