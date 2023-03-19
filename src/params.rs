@@ -473,7 +473,7 @@ impl EnvelopeParams<f32> for VibratoEnvelopeParams {
     }
 
     fn release(&self) -> Seconds {
-        Seconds::new(0.001)
+        Seconds::new(5.0)
     }
 }
 

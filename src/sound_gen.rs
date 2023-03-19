@@ -286,6 +286,7 @@ impl Voice {
     pub fn note_off(&mut self) {
         self.vol_env.remember();
         self.filter_env.remember();
+        self.vibrato_env.remember();
         self.note_state = NoteState::Released(self.samples_since_note_on);
     }
 
