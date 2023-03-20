@@ -72,7 +72,6 @@ impl Plugin for Nyasynth {
         context: &mut impl InitContext<Self>,
     ) -> bool {
         nih_plug::wrapper::setup_logger();
-        std::env::set_var("NIH_LOG", "/Users/aaron/dev/Rust/nyasynth/nyasynth_nih.log");
         nih_log!("Initalizing VST...");
         // On a retrigger, the next note is delayed by RETRIGGER_TIME. Hence, there is a latency
         // of RETRIGGER_TIME. Note that this latency doesn't exist for non-retriggered notes.
