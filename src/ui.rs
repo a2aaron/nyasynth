@@ -191,12 +191,12 @@ impl EditorState {
     }
 }
 
-fn load_image_from_memory(image_data: &[u8]) -> Result<ColorImage, image::ImageError> {
-    let image = image::load_from_memory(image_data)?;
+fn load_image_from_memory(image_data: &[u8]) -> ColorImage {
+    let image = image::load_from_memory(image_data).unwrap();
     let size = [image.width() as _, image.height() as _];
     let image_buffer = image.to_rgba8();
     let pixels = image_buffer.as_flat_samples();
-    Ok(ColorImage::from_rgba_unmultiplied(size, pixels.as_slice()))
+    ColorImage::from_rgba_unmultiplied(size, pixels.as_slice())
 }
 
 pub fn get_editor(
@@ -229,12 +229,7 @@ pub fn get_editor(
             ]
             .iter()
             .enumerate()
-            .map(|(i, img)| {
-                load_image(
-                    &format!("baksik-{}", i),
-                    load_image_from_memory(img).unwrap(),
-                )
-            })
+            .map(|(i, img)| load_image(&format!("baksik-{}", i), load_image_from_memory(img)))
             .collect();
             cat_images.push(baksik);
 
@@ -252,21 +247,32 @@ pub fn get_editor(
             ]
             .iter()
             .enumerate()
-            .map(|(i, img)| {
-                load_image(
-                    &format!("severian-{}", i),
-                    load_image_from_memory(img).unwrap(),
-                )
-            })
+            .map(|(i, img)| load_image(&format!("severian-{}", i), load_image_from_memory(img)))
             .collect();
             cat_images.push(severian);
 
-            let brushed_metal =
-                load_image_from_memory(include_bytes!("../assets/ui_2x_v2.png")).unwrap();
+            let chrysi = [
+                include_bytes!("../assets/cat-imgs/chrysi/0.png").as_slice(),
+                include_bytes!("../assets/cat-imgs/chrysi/1.png").as_slice(),
+                include_bytes!("../assets/cat-imgs/chrysi/2.png").as_slice(),
+                include_bytes!("../assets/cat-imgs/chrysi/3.png").as_slice(),
+                include_bytes!("../assets/cat-imgs/chrysi/4.png").as_slice(),
+                include_bytes!("../assets/cat-imgs/chrysi/5.png").as_slice(),
+                include_bytes!("../assets/cat-imgs/chrysi/6.png").as_slice(),
+                include_bytes!("../assets/cat-imgs/chrysi/7.png").as_slice(),
+                include_bytes!("../assets/cat-imgs/chrysi/8.png").as_slice(),
+                include_bytes!("../assets/cat-imgs/chrysi/9.png").as_slice(),
+            ]
+            .iter()
+            .enumerate()
+            .map(|(i, img)| load_image(&format!("chrysi-{}", i), load_image_from_memory(img)))
+            .collect();
+            cat_images.push(chrysi);
+
+            let brushed_metal = load_image_from_memory(include_bytes!("../assets/ui_2x_v2.png"));
             editor_state.brushed_metal = Some(load_image("metal-knob", brushed_metal));
 
-            let polycat_on =
-                load_image_from_memory(include_bytes!("../assets/POLYCAT ON.png")).unwrap();
+            let polycat_on = load_image_from_memory(include_bytes!("../assets/POLYCAT ON.png"));
             editor_state.polycat_on = Some(load_image("polycat-on", polycat_on));
 
             let determination =
