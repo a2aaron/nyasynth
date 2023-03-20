@@ -2,7 +2,6 @@ hello:
     clang -nostdlib hello.s -l system -o target/hello -g
     ./target/hello
 
-
 perf name:
     -trash {{name}}.trace
     -trash {{name}}.wav
@@ -19,6 +18,11 @@ vplayer:
 
 run:
     cargo run --release --bin standalone -- --midi-input "USB Axiom 49 Port 1" --backend auto --sample-rate 44100
+
+release-all:
+    cargo build --release
+    cargo xtask bundle nyasynth --release
+    cargo xwin build --release --target x86_64-pc-windows-msvc
 
 release-small:
     cargo build --release
