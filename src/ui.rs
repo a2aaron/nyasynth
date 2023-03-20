@@ -210,7 +210,14 @@ pub fn get_editor(
         egui_state,
         editor_state,
         |cx, editor_state| {
-            let load_image = |name: &str, image: ColorImage| -> TextureHandle {
+            let load_image = |name: &str, image: &[u8]| -> TextureHandle {
+                let image = load_image_from_memory(image);
+                cx.load_texture(name, image, egui::TextureFilter::Linear)
+            };
+
+            let load_cat_image = |name: &str, image: &[u8]| -> TextureHandle {
+                let image = load_image_from_memory(image);
+                // use nearest neighbor scaling for added Comedy
                 cx.load_texture(name, image, egui::TextureFilter::Nearest)
             };
 
@@ -229,7 +236,7 @@ pub fn get_editor(
             ]
             .iter()
             .enumerate()
-            .map(|(i, img)| load_image(&format!("baksik-{}", i), load_image_from_memory(img)))
+            .map(|(i, img)| load_cat_image(&format!("baksik-{}", i), img))
             .collect();
             cat_images.push(baksik);
 
@@ -247,7 +254,7 @@ pub fn get_editor(
             ]
             .iter()
             .enumerate()
-            .map(|(i, img)| load_image(&format!("severian-{}", i), load_image_from_memory(img)))
+            .map(|(i, img)| load_cat_image(&format!("severian-{}", i), img))
             .collect();
             cat_images.push(severian);
 
@@ -265,15 +272,19 @@ pub fn get_editor(
             ]
             .iter()
             .enumerate()
-            .map(|(i, img)| load_image(&format!("chrysi-{}", i), load_image_from_memory(img)))
+            .map(|(i, img)| load_cat_image(&format!("chrysi-{}", i), img))
             .collect();
             cat_images.push(chrysi);
 
-            let brushed_metal = load_image_from_memory(include_bytes!("../assets/ui_2x_v2.png"));
-            editor_state.brushed_metal = Some(load_image("metal-knob", brushed_metal));
+            editor_state.brushed_metal = Some(load_image(
+                "metal-knob",
+                include_bytes!("../assets/ui_2x_v2.png"),
+            ));
 
-            let polycat_on = load_image_from_memory(include_bytes!("../assets/POLYCAT ON.png"));
-            editor_state.polycat_on = Some(load_image("polycat-on", polycat_on));
+            editor_state.polycat_on = Some(load_image(
+                "polycat-on",
+                include_bytes!("../assets/POLYCAT ON.png"),
+            ));
 
             let determination =
                 egui::FontData::from_static(include_bytes!("../assets/DTM-mono.otf"));
