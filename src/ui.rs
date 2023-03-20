@@ -148,7 +148,8 @@ impl WidgetLocations {
 }
 
 struct EditorState {
-    cat_images: Vec<TextureHandle>,
+    cat_images: Vec<Vec<TextureHandle>>,
+    which_cat: usize,
     brushed_metal: Option<TextureHandle>,
     polycat_on: Option<TextureHandle>,
     polycat_state: bool,
@@ -164,6 +165,7 @@ impl EditorState {
                 serde_json::from_str(include_str!("../assets/Spine.json")).unwrap(),
             ),
             cat_images: vec![],
+            which_cat: 0,
             brushed_metal: None,
             polycat_on: None,
             polycat_state,
@@ -173,10 +175,11 @@ impl EditorState {
     }
 
     fn cat_image(&self) -> TextureHandle {
+        let cat_images = &self.cat_images[self.which_cat];
         let amount = self.envelope_amount.load(Ordering::Relaxed);
-        let i = (amount * (self.cat_images.len() - 1) as f32).floor() as usize;
-        let i = i.clamp(0, self.cat_images.len() - 1);
-        self.cat_images[i].clone()
+        let i = (amount * (cat_images.len() - 1) as f32).floor() as usize;
+        let i = i.clamp(0, cat_images.len() - 1);
+        cat_images[i].clone()
     }
 
     fn brushed_metal(&self) -> TextureHandle {
@@ -208,31 +211,55 @@ pub fn get_editor(
         editor_state,
         |cx, editor_state| {
             let load_image = |name: &str, image: ColorImage| -> TextureHandle {
-                cx.load_texture(name, image, egui::TextureFilter::Linear)
+                cx.load_texture(name, image, egui::TextureFilter::Nearest)
             };
 
             let cat_images = &mut editor_state.cat_images;
-            let cat_0 = load_image_from_memory(include_bytes!("../assets/cat-imgs/0.png")).unwrap();
-            let cat_1 = load_image_from_memory(include_bytes!("../assets/cat-imgs/1.png")).unwrap();
-            let cat_2 = load_image_from_memory(include_bytes!("../assets/cat-imgs/2.png")).unwrap();
-            let cat_3 = load_image_from_memory(include_bytes!("../assets/cat-imgs/3.png")).unwrap();
-            let cat_4 = load_image_from_memory(include_bytes!("../assets/cat-imgs/4.png")).unwrap();
-            let cat_5 = load_image_from_memory(include_bytes!("../assets/cat-imgs/5.png")).unwrap();
-            let cat_6 = load_image_from_memory(include_bytes!("../assets/cat-imgs/6.png")).unwrap();
-            let cat_7 = load_image_from_memory(include_bytes!("../assets/cat-imgs/7.png")).unwrap();
-            let cat_8 = load_image_from_memory(include_bytes!("../assets/cat-imgs/8.png")).unwrap();
-            let cat_9 = load_image_from_memory(include_bytes!("../assets/cat-imgs/9.png")).unwrap();
+            let baksik = [
+                include_bytes!("../assets/cat-imgs/baksik/0.png").as_slice(),
+                include_bytes!("../assets/cat-imgs/baksik/1.png").as_slice(),
+                include_bytes!("../assets/cat-imgs/baksik/2.png").as_slice(),
+                include_bytes!("../assets/cat-imgs/baksik/3.png").as_slice(),
+                include_bytes!("../assets/cat-imgs/baksik/4.png").as_slice(),
+                include_bytes!("../assets/cat-imgs/baksik/5.png").as_slice(),
+                include_bytes!("../assets/cat-imgs/baksik/6.png").as_slice(),
+                include_bytes!("../assets/cat-imgs/baksik/7.png").as_slice(),
+                include_bytes!("../assets/cat-imgs/baksik/8.png").as_slice(),
+                include_bytes!("../assets/cat-imgs/baksik/9.png").as_slice(),
+            ]
+            .iter()
+            .enumerate()
+            .map(|(i, img)| {
+                load_image(
+                    &format!("baksik-{}", i),
+                    load_image_from_memory(img).unwrap(),
+                )
+            })
+            .collect();
+            cat_images.push(baksik);
 
-            cat_images.push(load_image("cat-image-0", cat_0));
-            cat_images.push(load_image("cat-image-1", cat_1));
-            cat_images.push(load_image("cat-image-2", cat_2));
-            cat_images.push(load_image("cat-image-3", cat_3));
-            cat_images.push(load_image("cat-image-4", cat_4));
-            cat_images.push(load_image("cat-image-5", cat_5));
-            cat_images.push(load_image("cat-image-6", cat_6));
-            cat_images.push(load_image("cat-image-7", cat_7));
-            cat_images.push(load_image("cat-image-8", cat_8));
-            cat_images.push(load_image("cat-image-9", cat_9));
+            let severian = [
+                include_bytes!("../assets/cat-imgs/severian/out8.png").as_slice(),
+                include_bytes!("../assets/cat-imgs/severian/out10.png").as_slice(),
+                include_bytes!("../assets/cat-imgs/severian/out13.png").as_slice(),
+                include_bytes!("../assets/cat-imgs/severian/out16.png").as_slice(),
+                include_bytes!("../assets/cat-imgs/severian/out19.png").as_slice(),
+                include_bytes!("../assets/cat-imgs/severian/out22.png").as_slice(),
+                include_bytes!("../assets/cat-imgs/severian/out24.png").as_slice(),
+                include_bytes!("../assets/cat-imgs/severian/out26.png").as_slice(),
+                include_bytes!("../assets/cat-imgs/severian/out28.png").as_slice(),
+                include_bytes!("../assets/cat-imgs/severian/out30.png").as_slice(),
+            ]
+            .iter()
+            .enumerate()
+            .map(|(i, img)| {
+                load_image(
+                    &format!("severian-{}", i),
+                    load_image_from_memory(img).unwrap(),
+                )
+            })
+            .collect();
+            cat_images.push(severian);
 
             let brushed_metal =
                 load_image_from_memory(include_bytes!("../assets/ui_2x_v2.png")).unwrap();
@@ -274,6 +301,11 @@ pub fn get_editor(
                     // Cat Image
                     let image = image_shape(editor_state.cat_image(), locs.cat_image);
                     ui.painter().add(image);
+                    let cat_image = ui.allocate_rect(locs.cat_image, Sense::click());
+                    if cat_image.clicked() {
+                        editor_state.which_cat =
+                            (editor_state.which_cat + 1) % editor_state.cat_images.len()
+                    }
 
                     // Knobs
                     make_arc_knob(ui, &setter, &params.meow_attack, locs.meow_attack);
