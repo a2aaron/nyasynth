@@ -365,11 +365,17 @@ fn main() -> Result<(), Box<dyn Error>> {
         let params = nyasynth.debug_params();
         let param_setter = ParamSetter::new(&context);
         {
-            param_setter.set_parameter(params.dbg_polycat(), args.polycat);
+            param_setter.set_parameter(&params.polycat, args.polycat);
             // set to 0.5s
-            param_setter.set_parameter(params.dbg_meow_decay(), 0.5);
+            param_setter.set_parameter(&params.meow_decay, 0.5);
             // set to 40ms
-            param_setter.set_parameter(params.dbg_meow_release(), 40.0 / 1000.0);
+            param_setter.set_parameter(&params.meow_release, 40.0 / 1000.0);
+            // set vibrato amount
+            param_setter.set_parameter(&params.vibrato_amount, 0.5);
+            // set chorus on
+            param_setter.set_parameter(&params.chorus_mix, 0.5);
+            // set noise on
+            param_setter.set_parameter(&params.noise_mix, 0.5);
         }
     }
 

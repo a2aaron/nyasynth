@@ -335,20 +335,6 @@ impl Parameters {
     }
 }
 
-impl Parameters {
-    pub fn dbg_polycat(&self) -> &BoolParam {
-        &self.polycat
-    }
-
-    pub fn dbg_meow_decay(&self) -> &FloatParam {
-        &self.meow_decay
-    }
-
-    pub fn dbg_meow_release(&self) -> &FloatParam {
-        &self.meow_release
-    }
-}
-
 pub struct ChorusParams {
     pub rate: Hertz,
     pub depth: f32,
