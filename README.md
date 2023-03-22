@@ -13,7 +13,9 @@ Or click on one of the links below:
 
 [Download for Windows x86-64](https://github.com/a2aaron/nyasynth/releases/download/1.0/Nyasynth.1.0.Windows.x86-64.zip)
 
-[Download for Apple ARM](https://github.com/a2aaron/nyasynth/releases/download/1.0/Nyasynth.1.0.Mac.OSX.AArch64.zip)
+[Download for Apple (ARM Binary)](https://github.com/a2aaron/nyasynth/releases/download/1.0/Nyasynth.1.0.Mac.OSX.AArch64.zip)
+
+[Download for Apple (Universal Binary)](https://github.com/a2aaron/nyasynth/releases/download/1.0/Nyasynth.1.0.Mac.OSX.Universal.zip)
 
 (If your platform isn't listed above, you can try compiling from source by following the instructions below.)
 

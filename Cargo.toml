@@ -37,3 +37,18 @@ crate-type = ["cdylib", "lib"]
 
 [workspace]
 members = ["xtask"]
+
+# Cross compilation for Linux - use main-centos to get the oldest managable glibc
+[package.metadata.cross.target.x86_64-unknown-linux-gnu]
+xargo = false
+image = "ghcr.io/cross-rs/x86_64-unknown-linux-gnu:main-centos"
+pre-build = [
+    "yum install -y mesa-libGL-devel libXcursor-devel alsa-lib-devel python3 xcb-util-wm-devel",
+    # This probably only works on an x86 host.
+    "cd /tmp && curl -L 'https://github.com/jackaudio/jack2/archive/refs/tags/v1.9.22.tar.gz' -o jack2-v1.9.22.tar.gz && tar xf jack2-v1.9.22.tar.gz && cd jack2-1.9.22 && ./waf configure && ./waf build && ./waf install",
+]
+
+[package.metadata.cross.build.env]
+passthrough = [
+    "PKG_CONFIG_PATH=/usr/local/lib/pkgconfig",
+]

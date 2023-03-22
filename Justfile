@@ -21,8 +21,10 @@ run:
 
 release-all:
     cargo build --release
-    cargo xtask bundle nyasynth --release
     cargo xwin build --release --target x86_64-pc-windows-msvc
+    cargo xtask bundle-universal nyasynth --release
+    strip -Sx target/bundled/nyasynth.vst3/Contents/MacOS/nyasynth
+    codesign -f -s - target/bundled/nyasynth.vst3
 
 release-small:
     cargo build --release
