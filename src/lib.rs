@@ -253,6 +253,19 @@ impl Vst3Plugin for Nyasynth {
         &[Vst3SubCategory::Synth, Vst3SubCategory::Instrument];
 }
 
+impl ClapPlugin for Nyasynth {
+    const CLAP_ID: &'static str = "nyasynth";
+
+    const CLAP_DESCRIPTION: Option<&'static str> = Some("The World's Second Meowizer");
+
+    const CLAP_MANUAL_URL: Option<&'static str> = None;
+
+    const CLAP_SUPPORT_URL: Option<&'static str> = Some("https://github.com/a2aaron/nyasynth");
+
+    const CLAP_FEATURES: &'static [ClapFeature] =
+        &[ClapFeature::Synthesizer, ClapFeature::Instrument];
+}
+
 impl Nyasynth {
     fn set_sample_rate(&mut self, sample_rate: SampleRate) {
         if sample_rate != self.sample_rate {
@@ -363,3 +376,4 @@ impl Nyasynth {
 
 // Export symbols for main
 nih_export_vst3!(Nyasynth);
+nih_export_clap!(Nyasynth);
