@@ -5,6 +5,8 @@ seems that Meowsynth is only 32-bit and hence isn't compatible with many 64-bit 
 it's not compatible with Ableton, which doesn't support 32-bit VSTs any more). Additionally, there
 isn't a Mac or Linux version. This repo aims to fix that by being a recreation of the synthesizer!
 
+[Listen to Nyasynth in action!](https://youtu.be/A2qSIzGI7p8)
+
 ![A screenshot of the Nyasynth UI as it apperas on Mac.](affinity_photo/ui_mac.png)
 
 # Download
