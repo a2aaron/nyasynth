@@ -287,7 +287,7 @@ pub fn get_editor(
             ));
 
             let determination =
-                egui::FontData::from_static(include_bytes!("../assets/DTM-mono.otf"));
+                egui::FontData::from_static(include_bytes!("../assets/DTM-Mono.otf"));
 
             let mut fonts = FontDefinitions::default();
             fonts
