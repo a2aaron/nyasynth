@@ -1,7 +1,13 @@
-use std::sync::{atomic::Ordering, Arc};
+use std::{
+    error::Error,
+    sync::{atomic::Ordering, Arc},
+};
 
 use atomic_float::AtomicF32;
-use nih_plug::prelude::{Editor, Param, ParamSetter};
+use nih_plug::{
+    nih_error,
+    prelude::{Editor, Param, ParamSetter},
+};
 use nih_plug_egui::{
     create_egui_editor,
     egui::{
@@ -191,12 +197,14 @@ impl EditorState {
     }
 }
 
-fn load_image_from_memory(image_data: &[u8]) -> ColorImage {
-    let image = image::load_from_memory(image_data).unwrap();
+fn load_image_from_memory(image_data: &[u8]) -> Result<ColorImage, Box<dyn Error>> {
+    // Always use PNG here--this is the only format that we use anyways.
+    let format = image::ImageFormat::Png;
+    let image = image::load_from_memory_with_format(image_data, format)?;
     let size = [image.width() as _, image.height() as _];
     let image_buffer = image.to_rgba8();
     let pixels = image_buffer.as_flat_samples();
-    ColorImage::from_rgba_unmultiplied(size, pixels.as_slice())
+    Ok(ColorImage::from_rgba_unmultiplied(size, pixels.as_slice()))
 }
 
 pub fn get_editor(
@@ -212,11 +220,33 @@ pub fn get_editor(
         |cx, editor_state| {
             let load_image = |name: &str, image: &[u8]| -> TextureHandle {
                 let image = load_image_from_memory(image);
+                let image = match image {
+                    Ok(image) => image,
+                    Err(err) => {
+                        nih_error!(
+                            "Couldn't load image {}. Reason: {:?}. Falling back to example image",
+                            name,
+                            err
+                        );
+                        ColorImage::example()
+                    }
+                };
                 cx.load_texture(name, image, egui::TextureFilter::Linear)
             };
 
             let load_cat_image = |name: &str, image: &[u8]| -> TextureHandle {
                 let image = load_image_from_memory(image);
+                let image = match image {
+                    Ok(image) => image,
+                    Err(err) => {
+                        nih_error!(
+                            "Couldn't load image {}, Reason: {:?}. Falling back to example image",
+                            name,
+                            err
+                        );
+                        ColorImage::example()
+                    }
+                };
                 // use nearest neighbor scaling for added Comedy
                 cx.load_texture(name, image, egui::TextureFilter::Nearest)
             };
