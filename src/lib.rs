@@ -1,8 +1,3 @@
-#![feature(trait_alias)]
-#![feature(anonymous_lifetime_in_impl_trait)]
-#![feature(portable_simd)]
-#![feature(let_chains)]
-
 mod chorus;
 pub mod common;
 mod keys;

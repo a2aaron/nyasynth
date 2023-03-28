@@ -22,7 +22,7 @@ Or click on one of the links below:
 (If your platform isn't listed above, you can try compiling from source by following the instructions below.)
 
 # Build Instructions
-First, make sure you have [Rust](https://www.rust-lang.org/) installed. You will need to use the nightly version of the compiler, which you can switch to using `rustup default nightly`.
+First, make sure you have [Rust](https://www.rust-lang.org/) installed.
 
 To build the plugin as a vst3 bundle, run the following command:
 

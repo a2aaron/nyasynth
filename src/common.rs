@@ -425,11 +425,11 @@ impl From<FilterType> for biquad::Type<f32> {
     }
 }
 
-// TODO: you could reduce the Copy bound to just Clone although it'd be more annoying to work with.
-pub trait Lerpable =
-    Add<Self, Output = Self> + Sub<Self, Output = Self> + Mul<f32, Output = Self> + Copy;
-
 /// Lerp between two values. This function is clamped.
-pub fn lerp<T: Lerpable>(start: T, end: T, t: f32) -> T {
+// TODO: you could reduce the Copy bound to just Clone although it'd be more annoying to work with.
+pub fn lerp<T>(start: T, end: T, t: f32) -> T
+where
+    T: Add<T, Output = T> + Sub<T, Output = T> + Mul<f32, Output = T> + Copy,
+{
     (end - start) * t.clamp(0.0, 1.0) + start
 }
